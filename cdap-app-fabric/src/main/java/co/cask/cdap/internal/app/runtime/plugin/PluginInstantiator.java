@@ -441,7 +441,7 @@ public class PluginInstantiator implements Closeable {
         }
       }
 
-      // discard
+      // discard decimal point for all non floating point data types
       if (Long.class.equals(rawType) || Short.class.equals(rawType)
         || Integer.class.equals(rawType) || Byte.class.equals(rawType)) {
         int dotIndex = value.lastIndexOf(".");
