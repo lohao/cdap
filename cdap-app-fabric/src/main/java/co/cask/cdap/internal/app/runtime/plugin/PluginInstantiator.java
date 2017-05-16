@@ -441,8 +441,11 @@ public class PluginInstantiator implements Closeable {
         }
       }
 
-      if (Long.class.equals(rawType)) {
-        value = value.substring(0, value.lastIndexOf("."));
+      // discard
+      if (Long.class.equals(rawType) || Short.class.equals(rawType)
+        || Integer.class.equals(rawType) || Byte.class.equals(rawType)) {
+        int dotIndex = value.lastIndexOf(".");
+        value = value.substring(0, dotIndex == -1 ? value.length() : dotIndex);
       }
 
       if (Primitives.isWrapperType(rawType)) {
