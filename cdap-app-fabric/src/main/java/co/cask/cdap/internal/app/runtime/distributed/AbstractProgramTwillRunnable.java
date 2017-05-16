@@ -66,7 +66,6 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.tephra.TxConstants;
 import org.apache.twill.api.Command;
 import org.apache.twill.api.TwillContext;
 import org.apache.twill.api.TwillRunnable;
@@ -147,6 +146,9 @@ public abstract class AbstractProgramTwillRunnable<T extends ProgramRunner> impl
 
   @Override
   public void initialize(TwillContext context) {
+    name = context.getSpecification().getName();
+    LOG.info("Initializing runnable: " + name);
+
     Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionHandler());
     System.setSecurityManager(new RunnableSecurityManager(System.getSecurityManager()));
 
@@ -155,8 +157,7 @@ public abstract class AbstractProgramTwillRunnable<T extends ProgramRunner> impl
 
     runLatch = new CountDownLatch(1);
     coreServices = new ArrayList<>();
-    name = context.getSpecification().getName();
-    LOG.info("Initializing runnable: " + name);
+
     try {
       CommandLine cmdLine = parseArgs(context.getApplicationArguments());
 

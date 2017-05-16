@@ -30,6 +30,7 @@ import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.lang.ClassLoaders;
 import co.cask.cdap.common.lang.CombineClassLoader;
 import co.cask.cdap.common.lang.jar.BundleJarUtil;
+import co.cask.cdap.common.logging.LoggerLogHandler;
 import co.cask.cdap.common.logging.LoggingContext;
 import co.cask.cdap.common.logging.LoggingContextAccessor;
 import co.cask.cdap.common.twill.AbortOnTimeoutEventHandler;
@@ -73,8 +74,6 @@ import org.apache.twill.api.TwillController;
 import org.apache.twill.api.TwillPreparer;
 import org.apache.twill.api.TwillRunner;
 import org.apache.twill.api.logging.LogEntry;
-import org.apache.twill.api.logging.LogHandler;
-import org.apache.twill.api.logging.PrinterLogHandler;
 import org.apache.twill.common.Cancellable;
 import org.apache.twill.common.Threads;
 import org.apache.twill.filesystem.Location;
@@ -85,7 +84,6 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.io.Writer;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -315,8 +313,7 @@ public abstract class DistributedProgramRunner implements ProgramRunner {
                 LOG.warn("Invalid application container log level {}. Defaulting to ERROR.", logLevelConf);
               }
             }
-            twillPreparer.addLogHandler(
-              new ApplicationLogHandler(new PrinterLogHandler(new PrintWriter(System.out)), logLevel));
+            twillPreparer.addLogHandler(new LoggerLogHandler(LOG, logLevel));
           }
 
           // Add secure tokens
@@ -592,24 +589,6 @@ public abstract class DistributedProgramRunner implements ProgramRunner {
     controller.onRunning(cleanup, Threads.SAME_THREAD_EXECUTOR);
     controller.onTerminated(cleanup, Threads.SAME_THREAD_EXECUTOR);
     return controller;
-  }
-
-  private static final class ApplicationLogHandler implements LogHandler {
-
-    private final LogHandler delegate;
-    private final LogEntry.Level logLevel;
-
-    private ApplicationLogHandler(LogHandler delegate, LogEntry.Level logLevel) {
-      this.delegate = delegate;
-      this.logLevel = logLevel;
-    }
-
-    @Override
-    public void onLog(LogEntry logEntry) {
-      if (logEntry.getLogLevel().ordinal() <= logLevel.ordinal()) {
-        delegate.onLog(logEntry);
-      }
-    }
   }
 
   /**
