@@ -441,6 +441,10 @@ public class PluginInstantiator implements Closeable {
         }
       }
 
+      if (Long.class.equals(rawType)) {
+        value = value.substring(0, value.lastIndexOf("."));
+      }
+
       if (Primitives.isWrapperType(rawType)) {
         Method valueOf = rawType.getMethod("valueOf", String.class);
         try {
