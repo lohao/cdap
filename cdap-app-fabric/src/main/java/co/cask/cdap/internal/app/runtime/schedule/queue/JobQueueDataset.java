@@ -26,7 +26,9 @@ import co.cask.cdap.api.dataset.table.Row;
 import co.cask.cdap.api.dataset.table.Scanner;
 import co.cask.cdap.api.dataset.table.Table;
 import co.cask.cdap.internal.app.runtime.schedule.ProgramSchedule;
-import co.cask.cdap.internal.app.runtime.schedule.trigger.TriggerJsonCodec;
+import co.cask.cdap.internal.app.runtime.schedule.constraint.ConstraintCodec;
+import co.cask.cdap.internal.app.runtime.schedule.trigger.TriggerCodec;
+import co.cask.cdap.internal.schedule.constraint.Constraint;
 import co.cask.cdap.internal.schedule.trigger.Trigger;
 import co.cask.cdap.proto.Notification;
 import co.cask.cdap.proto.id.ScheduleId;
@@ -37,12 +39,9 @@ import com.google.common.collect.Lists;
 import com.google.common.hash.Hashing;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -60,7 +59,10 @@ public class JobQueueDataset extends AbstractDataset implements JobQueue {
 
   static final String EMBEDDED_TABLE_NAME = "t"; // table
   private static final Gson GSON =
-    new GsonBuilder().registerTypeAdapter(Trigger.class, new TriggerJsonCodec()).create();
+    new GsonBuilder()
+      .registerTypeAdapter(Trigger.class, new TriggerCodec())
+      .registerTypeAdapter(Constraint.class, new ConstraintCodec())
+      .create();
 
   // simply serialize the entire Job into one column
   private static final byte[] COL = new byte[] {'C'};
