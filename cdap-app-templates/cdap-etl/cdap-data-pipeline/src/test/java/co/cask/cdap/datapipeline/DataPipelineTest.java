@@ -26,6 +26,7 @@ import co.cask.cdap.api.plugin.PluginPropertyField;
 import co.cask.cdap.api.workflow.NodeStatus;
 import co.cask.cdap.api.workflow.WorkflowToken;
 import co.cask.cdap.common.conf.Constants;
+import co.cask.cdap.common.io.CaseInsensitiveEnumTypeAdapterFactory;
 import co.cask.cdap.datapipeline.mock.NaiveBayesClassifier;
 import co.cask.cdap.datapipeline.mock.NaiveBayesTrainer;
 import co.cask.cdap.datapipeline.mock.SpamMessage;
@@ -82,6 +83,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.common.io.ByteStreams;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -393,6 +396,457 @@ public class DataPipelineTest extends HydratorTestBase {
     validateMetric(3, appId, "errorfilter.records.out");
     validateMetric(5, appId, "sink1.records.in");
     validateMetric(3, appId, "sink2.records.in");
+  }
+
+  @Test
+  public void testIntToStringConversion() throws Exception {
+    Gson GSON = new GsonBuilder()
+      .registerTypeAdapterFactory(new CaseInsensitiveEnumTypeAdapterFactory())
+      .create();
+
+    String configJsonNoQuote =
+       "{\n" +
+       "  \"artifact\": {\n" +
+       "    \"name\": \"app\",\n" +
+       "    \"version\": \"1.0.0\",\n" +
+       "    \"scope\": \"USER\"\n" +
+       "  },\n" +
+       "  \"config\": {\n" +
+       "    \"engine\": \"MAPREDUCE\",\n" +
+       "    \"schedule\": \"* * * * *\",\n" +
+       "    \"postActions\": [],\n" +
+       "    \"stages\": [\n" +
+       "      {\n" +
+       "        \"name\": \"errorfilter\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"Filter\",\n" +
+       "          \"type\": \"errortransform\",\n" +
+       "          \"properties\": {\n" +
+       "            \"code\": 999\n" +  // Removed quotes here
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"errorflatten\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"Flatten\",\n" +
+       "          \"type\": \"errortransform\",\n" +
+       "          \"properties\": {}\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"filter2\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"StringValueFilter\",\n" +
+       "          \"type\": \"transform\",\n" +
+       "          \"properties\": {\n" +
+       "            \"field\": \"name\",\n" +
+       "            \"value\": \"Ralph\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"source2\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"Mock\",\n" +
+       "          \"type\": \"batchsource\",\n" +
+       "          \"properties\": {\n" +
+       "            \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"user\\\",\\\"fields\\\":[{\\\"name\\\":\\\"name\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"id\\\",\\\"type\\\":\\\"int\\\"}]}\",\n" +
+       "            \"tableName\": \"source1\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"dropnull\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"DropField\",\n" +
+       "          \"type\": \"transform\",\n" +
+       "          \"properties\": {\n" +
+       "            \"field\": \"name\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"sink2\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"Mock\",\n" +
+       "          \"type\": \"batchsink\",\n" +
+       "          \"properties\": {\n" +
+       "            \"tableName\": \"sink2\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"sink1\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"Mock\",\n" +
+       "          \"type\": \"batchsink\",\n" +
+       "          \"properties\": {\n" +
+       "            \"tableName\": \"sink1\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"agg2\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"GroupFilter\",\n" +
+       "          \"type\": \"batchaggregator\",\n" +
+       "          \"properties\": {\n" +
+       "            \"field\": \"name\",\n" +
+       "            \"value\": \"Mike\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"agg1\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"GroupFilter\",\n" +
+       "          \"type\": \"batchaggregator\",\n" +
+       "          \"properties\": {\n" +
+       "            \"field\": \"name\",\n" +
+       "            \"value\": \"Don\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"source1\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"Mock\",\n" +
+       "          \"type\": \"batchsource\",\n" +
+       "          \"properties\": {\n" +
+       "            \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"user\\\",\\\"fields\\\":[{\\\"name\\\":\\\"name\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"id\\\",\\\"type\\\":\\\"int\\\"}]}\",\n" +
+       "            \"tableName\": \"source1\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"name\": \"filter1\",\n" +
+       "        \"plugin\": {\n" +
+       "          \"name\": \"StringValueFilter\",\n" +
+       "          \"type\": \"transform\",\n" +
+       "          \"properties\": {\n" +
+       "            \"field\": \"name\",\n" +
+       "            \"value\": \"Leo\"\n" +
+       "          }\n" +
+       "        }\n" +
+       "      }\n" +
+       "    ],\n" +
+       "    \"connections\": [\n" +
+       "      {\n" +
+       "        \"from\": \"filter2\",\n" +
+       "        \"to\": \"errorflatten\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"filter1\",\n" +
+       "        \"to\": \"errorflatten\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"source2\",\n" +
+       "        \"to\": \"dropnull\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"agg2\",\n" +
+       "        \"to\": \"errorfilter\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"errorfilter\",\n" +
+       "        \"to\": \"sink2\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"filter2\",\n" +
+       "        \"to\": \"errorfilter\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"source1\",\n" +
+       "        \"to\": \"filter1\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"filter1\",\n" +
+       "        \"to\": \"errorfilter\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"agg2\",\n" +
+       "        \"to\": \"errorflatten\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"errorflatten\",\n" +
+       "        \"to\": \"sink1\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"dropnull\",\n" +
+       "        \"to\": \"errorfilter\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"agg1\",\n" +
+       "        \"to\": \"agg2\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"agg1\",\n" +
+       "        \"to\": \"errorflatten\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"agg1\",\n" +
+       "        \"to\": \"errorfilter\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"dropnull\",\n" +
+       "        \"to\": \"errorflatten\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"filter1\",\n" +
+       "        \"to\": \"filter2\"\n" +
+       "      },\n" +
+       "      {\n" +
+       "        \"from\": \"filter2\",\n" +
+       "        \"to\": \"agg1\"\n" +
+       "      }\n" +
+       "    ],\n" +
+       "    \"resources\": {\n" +
+       "      \"virtualCores\": 1,\n" +
+       "      \"memoryMB\": 1024\n" +
+       "    },\n" +
+       "    \"driverResources\": {\n" +
+       "      \"virtualCores\": 1,\n" +
+       "      \"memoryMB\": 1024\n" +
+       "    },\n" +
+       "    \"clientResources\": {\n" +
+       "      \"virtualCores\": 1,\n" +
+       "      \"memoryMB\": 1024\n" +
+       "    },\n" +
+       "    \"stageLoggingEnabled\": true,\n" +
+       "    \"processTimingEnabled\": true,\n" +
+       "    \"numOfRecordsPreview\": 0,\n" +
+       "    \"properties\": {},\n" +
+       "    \"sinks\": [],\n" +
+       "    \"transforms\": []\n" +
+       "  }\n" +
+       "}";
+
+    AppRequest<?> appRequest = GSON.fromJson(configJsonNoQuote, AppRequest.class);
+    ApplicationId appId = NamespaceId.DEFAULT.app("IntStringTest");
+    deployApplication(appId.toId(), appRequest);
+
+    String configJsonWithQuote =
+      "{\n" +
+        "  \"artifact\": {\n" +
+        "    \"name\": \"app\",\n" +
+        "    \"version\": \"1.0.0\",\n" +
+        "    \"scope\": \"USER\"\n" +
+        "  },\n" +
+        "  \"config\": {\n" +
+        "    \"engine\": \"MAPREDUCE\",\n" +
+        "    \"schedule\": \"* * * * *\",\n" +
+        "    \"postActions\": [],\n" +
+        "    \"stages\": [\n" +
+        "      {\n" +
+        "        \"name\": \"errorfilter\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"Filter\",\n" +
+        "          \"type\": \"errortransform\",\n" +
+        "          \"properties\": {\n" +
+        "            \"code\": \"999\"\n" +  // Quotes added back here
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"errorflatten\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"Flatten\",\n" +
+        "          \"type\": \"errortransform\",\n" +
+        "          \"properties\": {}\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"filter2\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"StringValueFilter\",\n" +
+        "          \"type\": \"transform\",\n" +
+        "          \"properties\": {\n" +
+        "            \"field\": \"name\",\n" +
+        "            \"value\": \"Ralph\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"source2\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"Mock\",\n" +
+        "          \"type\": \"batchsource\",\n" +
+        "          \"properties\": {\n" +
+        "            \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"user\\\",\\\"fields\\\":[{\\\"name\\\":\\\"name\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"id\\\",\\\"type\\\":\\\"int\\\"}]}\",\n" +
+        "            \"tableName\": \"source1\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"dropnull\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"DropField\",\n" +
+        "          \"type\": \"transform\",\n" +
+        "          \"properties\": {\n" +
+        "            \"field\": \"name\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"sink2\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"Mock\",\n" +
+        "          \"type\": \"batchsink\",\n" +
+        "          \"properties\": {\n" +
+        "            \"tableName\": \"sink2\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"sink1\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"Mock\",\n" +
+        "          \"type\": \"batchsink\",\n" +
+        "          \"properties\": {\n" +
+        "            \"tableName\": \"sink1\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"agg2\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"GroupFilter\",\n" +
+        "          \"type\": \"batchaggregator\",\n" +
+        "          \"properties\": {\n" +
+        "            \"field\": \"name\",\n" +
+        "            \"value\": \"Mike\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"agg1\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"GroupFilter\",\n" +
+        "          \"type\": \"batchaggregator\",\n" +
+        "          \"properties\": {\n" +
+        "            \"field\": \"name\",\n" +
+        "            \"value\": \"Don\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"source1\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"Mock\",\n" +
+        "          \"type\": \"batchsource\",\n" +
+        "          \"properties\": {\n" +
+        "            \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"user\\\",\\\"fields\\\":[{\\\"name\\\":\\\"name\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"id\\\",\\\"type\\\":\\\"int\\\"}]}\",\n" +
+        "            \"tableName\": \"source1\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"name\": \"filter1\",\n" +
+        "        \"plugin\": {\n" +
+        "          \"name\": \"StringValueFilter\",\n" +
+        "          \"type\": \"transform\",\n" +
+        "          \"properties\": {\n" +
+        "            \"field\": \"name\",\n" +
+        "            \"value\": \"Leo\"\n" +
+        "          }\n" +
+        "        }\n" +
+        "      }\n" +
+        "    ],\n" +
+        "    \"connections\": [\n" +
+        "      {\n" +
+        "        \"from\": \"filter2\",\n" +
+        "        \"to\": \"errorflatten\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"filter1\",\n" +
+        "        \"to\": \"errorflatten\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"source2\",\n" +
+        "        \"to\": \"dropnull\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"agg2\",\n" +
+        "        \"to\": \"errorfilter\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"errorfilter\",\n" +
+        "        \"to\": \"sink2\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"filter2\",\n" +
+        "        \"to\": \"errorfilter\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"source1\",\n" +
+        "        \"to\": \"filter1\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"filter1\",\n" +
+        "        \"to\": \"errorfilter\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"agg2\",\n" +
+        "        \"to\": \"errorflatten\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"errorflatten\",\n" +
+        "        \"to\": \"sink1\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"dropnull\",\n" +
+        "        \"to\": \"errorfilter\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"agg1\",\n" +
+        "        \"to\": \"agg2\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"agg1\",\n" +
+        "        \"to\": \"errorflatten\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"agg1\",\n" +
+        "        \"to\": \"errorfilter\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"dropnull\",\n" +
+        "        \"to\": \"errorflatten\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"filter1\",\n" +
+        "        \"to\": \"filter2\"\n" +
+        "      },\n" +
+        "      {\n" +
+        "        \"from\": \"filter2\",\n" +
+        "        \"to\": \"agg1\"\n" +
+        "      }\n" +
+        "    ],\n" +
+        "    \"resources\": {\n" +
+        "      \"virtualCores\": 1,\n" +
+        "      \"memoryMB\": 1024\n" +
+        "    },\n" +
+        "    \"driverResources\": {\n" +
+        "      \"virtualCores\": 1,\n" +
+        "      \"memoryMB\": 1024\n" +
+        "    },\n" +
+        "    \"clientResources\": {\n" +
+        "      \"virtualCores\": 1,\n" +
+        "      \"memoryMB\": 1024\n" +
+        "    },\n" +
+        "    \"stageLoggingEnabled\": true,\n" +
+        "    \"processTimingEnabled\": true,\n" +
+        "    \"numOfRecordsPreview\": 0,\n" +
+        "    \"properties\": {},\n" +
+        "    \"sinks\": [],\n" +
+        "    \"transforms\": []\n" +
+        "  }\n" +
+        "}";
+
+    appRequest = GSON.fromJson(configJsonWithQuote, AppRequest.class);
+    appId = NamespaceId.DEFAULT.app("IntStringTest");
+    deployApplication(appId.toId(), appRequest);
   }
 
   @Test
