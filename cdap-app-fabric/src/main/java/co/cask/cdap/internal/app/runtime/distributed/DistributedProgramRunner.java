@@ -252,6 +252,10 @@ public abstract class DistributedProgramRunner implements ProgramRunner {
       final String programJarName = programJarLocation.getName();
       localizeResources.put(programJarName, new LocalizeResource(program.getJarLocation().toURI(), false));
 
+      // Localize an expanded program jar
+      final String expandedProgramJarName = "expanded." + programJarName;
+      localizeResources.put(expandedProgramJarName, new LocalizeResource(program.getJarLocation().toURI(), true));
+
       // Localize the app spec
       localizeResources.put(APP_SPEC_FILE_NAME,
                             new LocalizeResource(saveAppSpec(program,
@@ -346,6 +350,7 @@ public abstract class DistributedProgramRunner implements ProgramRunner {
             .withBundlerClassAcceptor(getBundlerClassAcceptor(program))
             .withApplicationArguments(
               "--" + RunnableOptions.JAR, programJarName,
+              "--" + RunnableOptions.EXPANDED_JAR, expandedProgramJarName,
               "--" + RunnableOptions.HADOOP_CONF_FILE, HADOOP_CONF_FILE_NAME,
               "--" + RunnableOptions.CDAP_CONF_FILE, CDAP_CONF_FILE_NAME,
               "--" + RunnableOptions.APP_SPEC_FILE, APP_SPEC_FILE_NAME,
