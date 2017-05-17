@@ -189,7 +189,7 @@ public abstract class DistributedProgramRunner implements ProgramRunner {
    *                cleanup of this directory.
    * @return A {@link Map} from localized name to {@link LocalizeResource}.
    */
-  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) {
+  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) throws IOException {
     return Collections.emptyMap();
   }
 

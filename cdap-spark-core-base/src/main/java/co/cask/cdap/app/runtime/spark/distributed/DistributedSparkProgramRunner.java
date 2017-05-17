@@ -34,6 +34,7 @@ import co.cask.cdap.app.runtime.spark.SparkRuntimeUtils;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.lang.FilterClassLoader;
 import co.cask.cdap.common.twill.HadoopClassExcluder;
+import co.cask.cdap.internal.app.runtime.LocalizationUtils;
 import co.cask.cdap.internal.app.runtime.SystemArguments;
 import co.cask.cdap.internal.app.runtime.distributed.DistributedProgramRunner;
 import co.cask.cdap.internal.app.runtime.distributed.LocalizeResource;
@@ -53,10 +54,12 @@ import org.apache.twill.api.RunId;
 import org.apache.twill.api.TwillController;
 import org.apache.twill.api.TwillPreparer;
 import org.apache.twill.api.TwillRunner;
+import org.apache.twill.filesystem.LocationFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
@@ -71,12 +74,15 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
 
   private static final Logger LOG = LoggerFactory.getLogger(DistributedSparkProgramRunner.class);
 
+  private final LocationFactory locationFactory;
+
   @Inject
   @VisibleForTesting
   public DistributedSparkProgramRunner(TwillRunner twillRunner, YarnConfiguration hConf, CConfiguration cConf,
                                        TokenSecureStoreRenewer tokenSecureStoreRenewer,
-                                       Impersonator impersonator) {
+                                       Impersonator impersonator, LocationFactory locationFactory) {
     super(twillRunner, hConf, cConf, tokenSecureStoreRenewer, impersonator);
+    this.locationFactory = locationFactory;
   }
 
   @Override
@@ -132,16 +138,21 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
   }
 
   @Override
-  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) {
+  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) throws IOException {
     Map<String, LocalizeResource> localizeResources = new HashMap<>();
-    SparkPackageUtils.prepareSparkResources(tempDir, localizeResources);
+    SparkPackageUtils.prepareSparkResources(cConf, locationFactory, tempDir, localizeResources);
     return localizeResources;
   }
 
   @Override
   protected void prepareLaunch(Program program, TwillPreparer preparer) {
+    LocalizeResource sparkFramework = SparkPackageUtils.prepareSparkFramework(cConf, locationFactory);
+    String classpath = sparkFramework == null
+      ? SparkPackageUtils.locateSparkAssemblyJar().getName()
+      : LocalizationUtils.getLocalizedName(sparkFramework.getURI());
+
     preparer
-      .withClassPaths(SparkPackageUtils.locateSparkAssemblyJar().getName())
+      .withClassPaths(classpath)
       .withDependencies(SparkProgramRuntimeProvider.class)
       .withEnv(SparkPackageUtils.getSparkClientEnv());
   }

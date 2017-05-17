@@ -55,6 +55,7 @@ import org.apache.twill.api.TwillRunner;
 
 import java.io.Closeable;
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -129,7 +130,7 @@ public final class DistributedWorkflowProgramRunner extends DistributedProgramRu
   }
 
   @Override
-  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) {
+  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) throws IOException {
     Map<String, LocalizeResource> resources = new HashMap<>();
 
     WorkflowSpecification spec = getWorkflowSpecification(program);
