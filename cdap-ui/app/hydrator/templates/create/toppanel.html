@@ -115,15 +115,16 @@
       <div class="button-label">Save</div>
     </div>
     <div class="btn"
-         ng-click="!HydratorPlusPlusTopPanelCtrl.hasNodes ||HydratorPlusPlusTopPanelCtrl.onValidate()"
-         uib-tooltip="Start building a pipeline before validating"
+         ng-if="HydratorPlusPlusTopPanelCtrl.state.artifact.name === HydratorPlusPlusTopPanelCtrl.GLOBALS.etlDataPipeline"
+         ng-click="!HydratorPlusPlusTopPanelCtrl.hasNodes"
+         uib-tooltip="Start building a pipeline before scheduling"
          tooltip-placement="bottom auto"
          tooltip-enable="!HydratorPlusPlusTopPanelCtrl.hasNodes"
          tooltip-class="toppanel-tooltip"
          tooltip-append-to-body="true"
          ng-disabled="!HydratorPlusPlusTopPanelCtrl.hasNodes">
-      <span class="fa icon-validate"></span>
-      <div class="button-label">Validate</div>
+      <span class="fa icon-runtimestarttime"></span>
+      <div class="button-label">Schedule</div>
     </div>
     <div class="btn"
          ng-click="!HydratorPlusPlusTopPanelCtrl.hasNodes || HydratorPlusPlusTopPanelCtrl.onPublish()"

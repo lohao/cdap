@@ -243,18 +243,6 @@ class HydratorPlusPlusTopPanelCtrl {
 
     this.invalidName = (filteredMessages.length ? true : false);
   }
-  onValidate() {
-    this.HydratorPlusPlusConsoleActions.resetMessages();
-    let isStateValid = this.HydratorPlusPlusConfigStore.validateState(true);
-    if (isStateValid) {
-      this.HydratorPlusPlusConsoleActions.addMessage([{
-        type: 'success',
-        content: 'Validation success! Pipeline ' + this.HydratorPlusPlusConfigStore.getName() + ' is valid.'
-      }]);
-      return;
-    }
-    this.checkNameError();
-  }
   onPublish() {
     this.HydratorPlusPlusConfigActions.publishPipeline();
     this.checkNameError();
