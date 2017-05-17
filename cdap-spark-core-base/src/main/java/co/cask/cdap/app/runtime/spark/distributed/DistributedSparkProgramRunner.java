@@ -34,11 +34,9 @@ import co.cask.cdap.app.runtime.spark.SparkRuntimeUtils;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.lang.FilterClassLoader;
 import co.cask.cdap.common.twill.HadoopClassExcluder;
-import co.cask.cdap.internal.app.runtime.LocalizationUtils;
 import co.cask.cdap.internal.app.runtime.SystemArguments;
 import co.cask.cdap.internal.app.runtime.distributed.DistributedProgramRunner;
 import co.cask.cdap.internal.app.runtime.distributed.LocalizeResource;
-import co.cask.cdap.internal.app.runtime.distributed.ProgramTwillApplication;
 import co.cask.cdap.proto.ProgramType;
 import co.cask.cdap.proto.id.ProgramId;
 import co.cask.cdap.security.TokenSecureStoreRenewer;
@@ -52,7 +50,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.twill.api.ClassAcceptor;
 import org.apache.twill.api.RunId;
 import org.apache.twill.api.TwillController;
-import org.apache.twill.api.TwillPreparer;
 import org.apache.twill.api.TwillRunner;
 import org.apache.twill.filesystem.LocationFactory;
 import org.slf4j.Logger;
@@ -61,7 +58,9 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -96,24 +95,9 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
   }
 
   @Override
-  protected ClassAcceptor getBundlerClassAcceptor(Program program) {
-    final File sparkAssemblyJar = SparkPackageUtils.locateSparkAssemblyJar();
-    return new HadoopClassExcluder() {
-      @Override
-      public boolean accept(String className, URL classUrl, URL classPathUrl) {
-        // Exclude both hadoop and spark classes.
-        if (sparkAssemblyJar != null && sparkAssemblyJar.equals(classPathUrl)) {
-          return false;
-        }
-        return super.accept(className, classUrl, classPathUrl)
-          && !className.startsWith("org.apache.spark.");
-      }
-    };
-  }
+  protected void validateOptions(Program program, ProgramOptions options) {
+    super.validateOptions(program, options);
 
-  @Override
-  protected Map<String, ProgramTwillApplication.RunnableResource> getRunnables(Program program,
-                                                                               ProgramOptions programOptions) {
     // Extract and verify parameters
     ApplicationSpecification appSpec = program.getApplicationSpecification();
     Preconditions.checkNotNull(appSpec, "Missing application specification for %s", program.getId());
@@ -126,50 +110,61 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
 
     SparkSpecification spec = appSpec.getSpark().get(program.getName());
     Preconditions.checkNotNull(spec, "Missing SparkSpecification for %s", program.getId());
-
-    Map<String, String> clientArgs = RuntimeArguments.extractScope("task", "client",
-                                                                   programOptions.getUserArguments().asMap());
-    Resources resources = SystemArguments.getResources(clientArgs, spec.getClientResources());
-
-    Map<String, ProgramTwillApplication.RunnableResource> runnables = new HashMap<>();
-    runnables.put(spec.getName(), new ProgramTwillApplication.RunnableResource(new SparkTwillRunnable(spec.getName()),
-                                                                               createResourceSpec(resources, 1)));
-    return runnables;
   }
 
   @Override
-  protected Map<String, LocalizeResource> getExtraLocalizeResources(Program program, File tempDir) throws IOException {
-    Map<String, LocalizeResource> localizeResources = new HashMap<>();
-    SparkPackageUtils.prepareSparkResources(cConf, locationFactory, tempDir, localizeResources);
-    return localizeResources;
-  }
+  protected void setupLaunchConfig(LaunchConfig launchConfig, Program program, ProgramOptions options,
+                                   CConfiguration cConf, Configuration hConf, File tempDir) throws IOException {
 
-  @Override
-  protected void prepareLaunch(Program program, TwillPreparer preparer) {
-    LocalizeResource sparkFramework = SparkPackageUtils.prepareSparkFramework(cConf, locationFactory);
-    String classpath = sparkFramework == null
-      ? SparkPackageUtils.locateSparkAssemblyJar().getName()
-      : LocalizationUtils.getLocalizedName(sparkFramework.getURI());
-
-    preparer
-      .withClassPaths(classpath)
-      .withDependencies(SparkProgramRuntimeProvider.class)
-      .withEnv(SparkPackageUtils.getSparkClientEnv());
-  }
-
-  @Override
-  protected Configuration createContainerHConf(Program program, Configuration hConf) {
-    Configuration result = super.createContainerHConf(program, hConf);
-    result.setBoolean(SparkRuntimeContextConfig.HCONF_ATTR_CLUSTER_MODE, true);
+    // Update the container hConf
+    hConf.setBoolean(SparkRuntimeContextConfig.HCONF_ATTR_CLUSTER_MODE, true);
 
     if (SecurityUtil.isKerberosEnabled(cConf)) {
       // Need to divide the interval by 0.8 because Spark logic has a 0.8 discount on the interval
       // If we don't offset it, it will look for the new credentials too soon
       // Also add 5 seconds to the interval to give master time to push the changes to the Spark client container
-      result.setLong(SparkRuntimeContextConfig.HCONF_ATTR_CREDENTIALS_UPDATE_INTERVAL_MS,
-                            (long) ((secureStoreRenewer.getUpdateInterval() + 5000) / 0.8));
+      hConf.setLong(SparkRuntimeContextConfig.HCONF_ATTR_CREDENTIALS_UPDATE_INTERVAL_MS,
+                    (long) ((secureStoreRenewer.getUpdateInterval() + 5000) / 0.8));
     }
-    return result;
+
+    // Setup the launch config
+    ApplicationSpecification appSpec = program.getApplicationSpecification();
+    SparkSpecification spec = appSpec.getSpark().get(program.getName());
+
+    Map<String, String> clientArgs = RuntimeArguments.extractScope("task", "client",
+                                                                   options.getUserArguments().asMap());
+    Resources resources = SystemArguments.getResources(clientArgs, spec.getClientResources());
+
+    // Add runnable. Only one instance for the spark client
+    launchConfig.addRunnable(spec.getName(), new SparkTwillRunnable(spec.getName()), resources, 1);
+
+    Map<String, LocalizeResource> localizeResources = new HashMap<>();
+    List<String> classpath = new ArrayList<>();
+    SparkPackageUtils.prepareSparkResources(cConf, locationFactory, tempDir, localizeResources, classpath);
+
+    // Add extra resources, classpath, dependencies, env and setup ClassAcceptor
+    launchConfig
+      .addExtraResources(localizeResources)
+      .addExtraClasspath(classpath)
+      .addExtraDependencies(SparkProgramRuntimeProvider.class)
+      .addExtraEnv(SparkPackageUtils.getSparkClientEnv())
+      .setClassAcceptor(createBundlerClassAcceptor());
+  }
+
+
+  private ClassAcceptor createBundlerClassAcceptor() {
+    final File sparkAssemblyJar = SparkPackageUtils.locateSparkAssemblyJar();
+    return new HadoopClassExcluder() {
+      @Override
+      public boolean accept(String className, URL classUrl, URL classPathUrl) {
+        // Exclude both hadoop and spark classes.
+        if (sparkAssemblyJar != null && sparkAssemblyJar.equals(classPathUrl)) {
+          return false;
+        }
+        return super.accept(className, classUrl, classPathUrl)
+          && !className.startsWith("org.apache.spark.");
+      }
+    };
   }
 
   @Override

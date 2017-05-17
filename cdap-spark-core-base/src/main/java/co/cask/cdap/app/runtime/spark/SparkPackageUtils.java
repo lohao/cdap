@@ -49,6 +49,7 @@ import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -97,8 +98,8 @@ public final class SparkPackageUtils {
    *         {@code null} will be returned if not able to prepare such location
    */
   @Nullable
-  public static synchronized LocalizeResource prepareSparkFramework(CConfiguration cConf,
-                                                                    LocationFactory locationFactory) {
+  private static synchronized LocalizeResource prepareSparkFramework(CConfiguration cConf,
+                                                                     LocationFactory locationFactory) {
     try {
       if (sparkFramework != null && locationFactory.create(sparkFramework.getURI()).exists()) {
         return sparkFramework;
@@ -204,18 +205,23 @@ public final class SparkPackageUtils {
    * @param localizeResources A map from localized name to {@link LocalizeResource} for this method to update
    */
   public static void prepareSparkResources(CConfiguration cConf, LocationFactory locationFactory, File tempDir,
-                                           Map<String, LocalizeResource> localizeResources) throws IOException {
+                                           Map<String, LocalizeResource> localizeResources,
+                                           Collection<String> classpath) throws IOException {
     Properties sparkConf = getSparkDefaultConf();
 
     LocalizeResource sparkFramework = prepareSparkFramework(cConf, locationFactory);
     if (sparkFramework != null) {
-      localizeResources.put(LocalizationUtils.getLocalizedName(sparkFramework.getURI()), sparkFramework);
+      String localizedName = LocalizationUtils.getLocalizedName(sparkFramework.getURI());
+      localizeResources.put(localizedName, sparkFramework);
       if (sparkConf.getProperty(SPARK_YARN_JAR) == null) {
         sparkConf.setProperty(SPARK_YARN_JAR, sparkFramework.getURI().toString());
       }
+
+      classpath.add(localizedName);
     } else {
       File sparkAssemblyJar = locateSparkAssemblyJar();
       localizeResources.put(sparkAssemblyJar.getName(), new LocalizeResource(sparkAssemblyJar));
+      classpath.add(sparkAssemblyJar.getName());
     }
 
     // Localize the spark-defaults.conf file
