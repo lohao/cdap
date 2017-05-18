@@ -27,11 +27,13 @@ import co.cask.cdap.app.runtime.ProgramClassLoaderProvider;
 import co.cask.cdap.app.runtime.ProgramController;
 import co.cask.cdap.app.runtime.ProgramOptions;
 import co.cask.cdap.app.runtime.ProgramRunner;
+import co.cask.cdap.app.runtime.spark.SparkCompat;
 import co.cask.cdap.app.runtime.spark.SparkPackageUtils;
 import co.cask.cdap.app.runtime.spark.SparkProgramRuntimeProvider;
 import co.cask.cdap.app.runtime.spark.SparkRuntimeContextConfig;
 import co.cask.cdap.app.runtime.spark.SparkRuntimeUtils;
 import co.cask.cdap.common.conf.CConfiguration;
+import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.lang.FilterClassLoader;
 import co.cask.cdap.common.twill.HadoopClassExcluder;
 import co.cask.cdap.internal.app.runtime.SystemArguments;
@@ -74,13 +76,16 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
   private static final Logger LOG = LoggerFactory.getLogger(DistributedSparkProgramRunner.class);
 
   private final LocationFactory locationFactory;
+  private final SparkCompat sparkCompat;
 
   @Inject
   @VisibleForTesting
-  public DistributedSparkProgramRunner(TwillRunner twillRunner, YarnConfiguration hConf, CConfiguration cConf,
+  public DistributedSparkProgramRunner(SparkCompat sparkComat, TwillRunner twillRunner,
+                                       YarnConfiguration hConf, CConfiguration cConf,
                                        TokenSecureStoreRenewer tokenSecureStoreRenewer,
                                        Impersonator impersonator, LocationFactory locationFactory) {
     super(twillRunner, hConf, cConf, tokenSecureStoreRenewer, impersonator);
+    this.sparkCompat = sparkComat;
     this.locationFactory = locationFactory;
   }
 
@@ -143,11 +148,14 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
     SparkPackageUtils.prepareSparkResources(cConf, locationFactory, tempDir, localizeResources, classpath);
 
     // Add extra resources, classpath, dependencies, env and setup ClassAcceptor
+    Map<String, String> extraEnv = new HashMap<>(SparkPackageUtils.getSparkClientEnv());
+    extraEnv.put(Constants.SPARK_COMPAT_ENV, sparkCompat.getCompat());
+
     launchConfig
       .addExtraResources(localizeResources)
       .addExtraClasspath(classpath)
       .addExtraDependencies(SparkProgramRuntimeProvider.class)
-      .addExtraEnv(SparkPackageUtils.getSparkClientEnv())
+      .addExtraEnv(extraEnv)
       .setClassAcceptor(createBundlerClassAcceptor());
   }
 

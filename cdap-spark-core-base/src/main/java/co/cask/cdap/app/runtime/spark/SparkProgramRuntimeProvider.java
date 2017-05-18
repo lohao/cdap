@@ -27,10 +27,14 @@ import co.cask.cdap.proto.ProgramType;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.io.Closeables;
+import com.google.inject.AbstractModule;
+import com.google.inject.Binder;
+import com.google.inject.Binding;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Key;
 import com.google.inject.ProvisionException;
+import com.google.inject.spi.InstanceBinding;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,18 +50,13 @@ import java.util.List;
  * A {@link ProgramRuntimeProvider} that provides runtime system support for {@link ProgramType#SPARK} program.
  * This class shouldn't have dependency on Spark classes.
  */
-public class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
+public abstract class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkProgramRuntimeProvider.class);
 
   private final SparkCompat providerSparkCompat;
   private ClassLoader distributedRunnerClassLoader;
   private URL[] classLoaderUrls;
-
-  // only used by SparkTwillRunnable to directly call createProgramRunner, not to check whether spark is supported.
-  public SparkProgramRuntimeProvider() {
-    this(SparkCompat.UNKNOWN);
-  }
 
   protected SparkProgramRuntimeProvider(SparkCompat providerSparkCompat) {
     this.providerSparkCompat = providerSparkCompat;
@@ -82,7 +81,8 @@ public class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
             // finished.
             // The current CDAP call run right after it get a ProgramRunner and never reuse a ProgramRunner.
             // TODO: CDAP-5506 to refactor the program runtime architecture to remove the need of this assumption
-            return createSparkProgramRunner(injector, SparkProgramRunner.class.getName(), classLoader);
+            return createSparkProgramRunner(createRunnerInjector(injector, classLoader),
+                                            SparkProgramRunner.class.getName(), classLoader);
           } catch (Throwable t) {
             // If there is any exception, close the classloader
             Closeables.closeQuietly(classLoader);
@@ -98,8 +98,10 @@ public class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
         // no SparkContext being created, hence no need to provide runtime isolation.
         // This also limits the amount of permgen usage to be constant in the CDAP master regardless of how
         // many Spark programs are running. We never need to close the SparkRunnerClassLoader until process shutdown.
-        return createSparkProgramRunner(injector, DistributedSparkProgramRunner.class.getName(),
-                                        getDistributedRunnerClassLoader());
+        ClassLoader classLoader = getDistributedRunnerClassLoader();
+        return createSparkProgramRunner(createRunnerInjector(injector, classLoader),
+                                        DistributedSparkProgramRunner.class.getName(),
+                                        classLoader);
       default:
         throw new IllegalArgumentException("Unsupported Spark execution mode " + mode);
     }
@@ -114,6 +116,35 @@ public class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Creates a guice {@link Injector} for instantiating program runner.
+   *
+   * @param injector the parent injector
+   * @param runnerClassLoader the classloader for the program runner class
+   * @return a new injector for injection for program runner.
+   */
+  private Injector createRunnerInjector(Injector injector, final ClassLoader runnerClassLoader) {
+    return injector.createChildInjector(new AbstractModule() {
+      @Override
+      protected void configure() {
+        // Add a binding for SparkCompat enum
+        // The binding needs to be on the enum class loaded by the runner classloader
+        try {
+          Class<? extends Enum> type = (Class<? extends Enum>) runnerClassLoader.loadClass(SparkCompat.class.getName());
+          bindEnum(binder(), type, providerSparkCompat.name());
+        } catch (ClassNotFoundException e) {
+          // This shouldn't happen
+          throw Throwables.propagate(e);
+        }
+      }
+
+      private <T extends Enum<T>> void bindEnum(Binder binder, Class<T> enumType, String name) {
+        // This workaround the enum generic
+        binder.bind(enumType).toInstance(Enum.valueOf(enumType, name));
+      }
+    });
   }
 
   private synchronized ClassLoader getDistributedRunnerClassLoader() {
@@ -158,6 +189,13 @@ public class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
    */
   private <T> T createInstance(Injector injector, Type type, ClassLoader sparkClassLoader) throws Exception {
     Key<?> typeKey = Key.get(type);
+
+    // If there is an explicit instance binding, return the binded instance directly
+    Binding<?> binding = injector.getExistingBinding(typeKey);
+    if (binding != null && binding instanceof InstanceBinding) {
+      return (T) ((InstanceBinding) binding).getInstance();
+    }
+
     @SuppressWarnings("unchecked")
     Class<T> rawType = (Class<T>) typeKey.getTypeLiteral().getRawType();
 
@@ -202,7 +240,8 @@ public class SparkProgramRuntimeProvider implements ProgramRuntimeProvider {
     try {
       return type.getDeclaredConstructor();
     } catch (NoSuchMethodException e) {
-      throw new ProvisionException("No constructor is annotated with @Inject and there is no default constructor", e);
+      throw new ProvisionException(
+        "No constructor is annotated with @Inject and there is no default constructor for class " + type.getName(), e);
     }
   }
 

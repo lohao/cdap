@@ -38,6 +38,7 @@ import co.cask.cdap.api.workflow.AbstractWorkflow;
 import co.cask.cdap.app.DefaultAppConfigurer;
 import co.cask.cdap.app.program.Program;
 import co.cask.cdap.app.runtime.ProgramOptions;
+import co.cask.cdap.app.runtime.spark.SparkCompat;
 import co.cask.cdap.app.runtime.spark.distributed.DistributedSparkProgramRunner;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.internal.app.runtime.BasicArguments;
@@ -94,7 +95,7 @@ public class DistributedProgramRunnerTxTimeoutTest {
     serviceRunner = new DistributedServiceProgramRunner(null, yConf, cConf, null, null);
     workerRunner = new DistributedWorkerProgramRunner(null, yConf, cConf, null, null);
     mapreduceRunner = new DistributedMapReduceProgramRunner(null, yConf, cConf, null, null);
-    sparkRunner = new DistributedSparkProgramRunner(null, yConf, cConf, null, null, null);
+    sparkRunner = new DistributedSparkProgramRunner(SparkCompat.SPARK1_2_10, null, yConf, cConf, null, null, null);
     workflowRunner = new DistributedWorkflowProgramRunner(null, yConf, cConf, null, null, null);
   }
 
