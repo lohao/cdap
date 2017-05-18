@@ -16,6 +16,7 @@
 
 package co.cask.cdap.internal.app.runtime.schedule.store;
 
+import co.cask.cdap.api.app.ApplicationSpecification;
 import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.api.dataset.DatasetSpecification;
 import co.cask.cdap.api.dataset.lib.AbstractDataset;
@@ -27,13 +28,18 @@ import co.cask.cdap.api.dataset.table.Put;
 import co.cask.cdap.api.dataset.table.Row;
 import co.cask.cdap.api.dataset.table.Scan;
 import co.cask.cdap.api.dataset.table.Scanner;
+import co.cask.cdap.api.schedule.ScheduleSpecification;
+import co.cask.cdap.app.store.Store;
 import co.cask.cdap.common.AlreadyExistsException;
 import co.cask.cdap.common.NotFoundException;
+import co.cask.cdap.common.namespace.NamespaceQueryAdmin;
 import co.cask.cdap.internal.app.runtime.schedule.ProgramSchedule;
 import co.cask.cdap.internal.app.runtime.schedule.trigger.PartitionTrigger;
 import co.cask.cdap.internal.app.runtime.schedule.trigger.TriggerJsonCodec;
 import co.cask.cdap.internal.schedule.trigger.Trigger;
+import co.cask.cdap.proto.ProgramType;
 import co.cask.cdap.proto.id.ApplicationId;
+import co.cask.cdap.proto.id.NamespaceId;
 import co.cask.cdap.proto.id.ProgramId;
 import co.cask.cdap.proto.id.ScheduleId;
 import com.google.common.base.Joiner;
@@ -79,6 +85,10 @@ public class ProgramScheduleStoreDataset extends AbstractDataset {
   private static final byte[] SCHEDULE_COLUMN_BYTES = Bytes.toBytes(SCHEDULE_COLUMN);
   private static final String TRIGGER_KEY_COLUMN = "tk"; // trigger key
   private static final byte[] TRIGGER_KEY_COLUMN_BYTES = Bytes.toBytes(TRIGGER_KEY_COLUMN);
+  private static final byte[] MIGRATION_COMPLETE_NAMESPACE_ROW_BYTES = Bytes.toBytes("migration.ns");
+  private static final byte[] MIGRATION_COMPLETE_NAMESPACE_COLUMN_BYTES = Bytes.toBytes("ns");
+  private static final byte[] MIGRATION_COMPLETE_ROW_BYTES = Bytes.toBytes("migration.complete");
+  private static final byte[] MIGRATION_COMPLETE_COLUMN_BYTES = Bytes.toBytes("mc");
 
   // package visible for the dataset definition
   static final String EMBEDDED_TABLE_NAME = "it"; // indexed table
@@ -93,6 +103,76 @@ public class ProgramScheduleStoreDataset extends AbstractDataset {
                               @EmbeddedDataset(EMBEDDED_TABLE_NAME) IndexedTable store) {
     super(spec.getName(), store);
     this.store = store;
+  }
+
+  /**
+   * Migrate schedules in a given namespace from app metadata store to ProgramScheduleStoreDataset
+   * @param namespaceId the namespace with schedules to be migrated
+   * @param appMetaStore app metadata store with schedules to be migrated
+   * @return the lexicographically largest namespace id String with schedule migration completed
+   */
+  public String migrateFromAppMetadataStore(NamespaceId namespaceId, Store appMetaStore) {
+    String completedNamespace = getMigrationCompleteNamespace();
+    if (completedNamespace != null && completedNamespace.compareTo(namespaceId.toString()) > 0) {
+      return completedNamespace;
+    }
+    for (ApplicationSpecification appSpec : appMetaStore.getAllApplications(namespaceId)) {
+      ApplicationId appId = namespaceId.app(appSpec.getName(), appSpec.getAppVersion());
+      for (ScheduleSpecification scheduleSpec : appSpec.getSchedules().values()) {
+        String scheduleKey = rowKeyForSchedule(appId, scheduleSpec.getSchedule().getName());
+        if (!store.get(new Get(scheduleKey)).isEmpty()) {
+          LOG.debug("Skip migrating schedule '{}' since it already exists.", scheduleSpec.getSchedule().getName());
+          continue;
+        }
+        ProgramType programType = ProgramType.valueOfSchedulableType(scheduleSpec.getProgram().getProgramType());
+        ProgramId programId = appId.program(programType, scheduleSpec.getProgram().getProgramName());
+        ProgramSchedule schedule = Schedulers.toProgramSchedule(scheduleSpec.getSchedule(), programId,
+                                                                scheduleSpec.getProperties());
+        store.put(new Put(scheduleKey, SCHEDULE_COLUMN, GSON.toJson(schedule)));
+        int count = 0;
+        for (String triggerKey : extractTriggerKeys(schedule)) {
+          String triggerRowKey = rowKeyForTrigger(scheduleKey, count++);
+          store.put(new Put(triggerRowKey, TRIGGER_KEY_COLUMN, triggerKey));
+        }
+      }
+    }
+    store.put(MIGRATION_COMPLETE_NAMESPACE_ROW_BYTES, MIGRATION_COMPLETE_NAMESPACE_COLUMN_BYTES,
+              Bytes.toBytes(namespaceId.toString()));
+    return namespaceId.toString();
+  }
+
+  @Nullable
+  private String getMigrationCompleteNamespace() {
+    Row row = store.get(MIGRATION_COMPLETE_NAMESPACE_ROW_BYTES);
+    if (row.isEmpty()) {
+      return null;
+    }
+    try {
+      String namespace = Bytes.toString(row.get(MIGRATION_COMPLETE_NAMESPACE_COLUMN_BYTES));
+      NamespaceId.fromString(namespace); // verify whether the namespace if of correct format
+      return namespace;
+    } catch (Exception e) {
+      LOG.debug("Failed to read the migration complete namespace. Conti");
+      return null;
+    }
+  }
+
+  public void setMigrationComplete() {
+    store.put(MIGRATION_COMPLETE_ROW_BYTES, MIGRATION_COMPLETE_COLUMN_BYTES, Bytes.toBytes(true));
+  }
+
+  public boolean isMigrationComplete() {
+    Row row = store.get(MIGRATION_COMPLETE_ROW_BYTES);
+    if (row.isEmpty()) {
+      return false;
+    }
+    try {
+      return Bytes.toBoolean(row.get(MIGRATION_COMPLETE_COLUMN_BYTES));
+    } catch (Exception e) {
+      LOG.warn("Failed to read whether schedule migration from app metadata store is complete. " +
+                 "Continue with migration assuming migration is not complete.", e);
+      return false;
+    }
   }
 
   /**
