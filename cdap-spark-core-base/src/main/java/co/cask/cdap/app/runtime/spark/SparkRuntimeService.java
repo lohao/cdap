@@ -174,8 +174,6 @@ final class SparkRuntimeService extends AbstractExecutionThreadService {
         File metricsConf = SparkMetricsSink.writeConfig(File.createTempFile("metrics", ".properties", tempDir));
         metricsConfPath = metricsConf.getAbsolutePath();
       } else {
-        LOG.info("prepare localize resources");
-
         // Localize all user requested files in distributed mode
         distributedUserResources(context.getLocalizeResources(), localizeResources);
 
@@ -239,8 +237,6 @@ final class SparkRuntimeService extends AbstractExecutionThreadService {
           localizeResources.add(new LocalizeResource(jarURI, false));
         }
         classpath = joiner.join(classpath, joiner.join(extraJars));
-
-        LOG.info("done localize resources");
       }
 
       final Map<String, String> configs = createSubmitConfigs(tempDir, metricsConfPath, classpath,
@@ -254,7 +250,6 @@ final class SparkRuntimeService extends AbstractExecutionThreadService {
           if (!isRunning()) {
             return immediateCancelledFuture();
           }
-          LOG.info("submitting to spark");
           return sparkSubmitter.submit(runtimeContext, configs, localizeResources, jobJar, runtimeContext.getRunId());
         }
       };

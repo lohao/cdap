@@ -51,7 +51,7 @@ public enum SparkCompat {
     compatStr = compatStr == null ? cConf.get(Constants.AppFabric.SPARK_COMPAT) : compatStr;
 
     for (SparkCompat sparkCompat : values()) {
-      if (sparkCompat.equals(compatStr)) {
+      if (sparkCompat.getCompat().equals(compatStr)) {
         return sparkCompat;
       }
     }

@@ -50,7 +50,6 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -59,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import javax.annotation.Nullable;
@@ -75,10 +75,17 @@ public final class SparkPackageUtils {
   private static final String SPARK_ENV_PREFIX = "_SPARK_";
   // Environment variable name for the spark conf directory.
   private static final String SPARK_CONF_DIR = "SPARK_CONF_DIR";
+  // Environment variable name for the spark version. It is being setup by the startup script.
+  private static final String SPARK_VERSION = "SPARK_VERSION";
+  // Environment variable name for the location to the spark framework direction in local file system.
+  // It is setup for the YARN container to find the spark framework in the container directory.
+  private static final String SPARK_LIBRARY = "SPARK_LIBRARY";
   // File name for the spark default config
   private static final String SPARK_DEFAULTS_CONF = "spark-defaults.conf";
   // Spark1 conf key for spark-assembly jar location
   private static final String SPARK_YARN_JAR = "spark.yarn.jar";
+  // Spark2 conf key for spark archive (zip of jars) location
+  private static final String SPARK_YARN_ARCHIVE = "spark.yarn.archive";
 
   // Environment variable name for locating spark home directory
   private static final String SPARK_HOME = Constants.SPARK_HOME;
@@ -88,52 +95,125 @@ public final class SparkPackageUtils {
   public static final String LOCALIZED_CONF_DIR = "__spark_conf__";
 
   // The spark framework on the local file system.
-  private static final EnumMap<SparkCompat, Set<File>> LOCAL_SPARK_FRAMEWORKS = new EnumMap<>(SparkCompat.class);
+  private static final EnumMap<SparkCompat, Set<File>> LOCAL_SPARK_LIBRARIES = new EnumMap<>(SparkCompat.class);
 
   // The spark framework ready to be localized
-//  private static final EnumMap<SparkCompat, LocalizeResource> SPARK_FRAMEWORKS = new EnumMap<>(SparkCompat.class);
+  private static final EnumMap<SparkCompat, SparkFramework> SPARK_FRAMEWORKS = new EnumMap<>(SparkCompat.class);
 
   private static Map<String, String> sparkEnv;
-
-  private static LocalizeResource sparkFramework;
 
   /**
    * Returns the set of jar files for the spark library.
    */
-  public static synchronized Set<File> getLocalSparkFramework(SparkCompat sparkCompat) {
-    Set<File> sparkFramework = LOCAL_SPARK_FRAMEWORKS.get(sparkCompat);
-    if (sparkFramework != null) {
-      return sparkFramework;
+  public static synchronized Set<File> getLocalSparkLibrary(SparkCompat sparkCompat) {
+    Set<File> jars = LOCAL_SPARK_LIBRARIES.get(sparkCompat);
+    if (jars != null) {
+      return jars;
     }
+
+    // This is for YARN container, which the launcher will set the environment variable
+    // See #prepareSparkResources
+    String sparkLibrary = System.getenv(SPARK_LIBRARY);
 
     // In future, we could have SPARK1 and SPARK2 home.
     String sparkHome = System.getenv(SPARK_HOME);
-    if (sparkHome == null) {
+    if (sparkLibrary == null && sparkHome == null) {
       throw new IllegalStateException("Spark not found. Please set environment variable " + SPARK_HOME);
     }
 
     switch (sparkCompat) {
       case SPARK1_2_10:
-        LOCAL_SPARK_FRAMEWORKS.put(sparkCompat, Collections.singleton(locateSpark1AssemblyJar(sparkHome)));
+        LOCAL_SPARK_LIBRARIES.put(sparkCompat, Collections.singleton(getSpark1AssemblyJar(sparkLibrary, sparkHome)));
         break;
       case SPARK2_2_11:
-        LOCAL_SPARK_FRAMEWORKS.put(sparkCompat, locateSpark2AssemblyJar(sparkHome));
+        LOCAL_SPARK_LIBRARIES.put(sparkCompat, getSpark2LibraryJars(sparkLibrary, sparkHome));
         break;
       default:
         // This shouldn't happen
         throw new IllegalStateException("Unsupport Spark version " + sparkCompat);
     }
 
-    return LOCAL_SPARK_FRAMEWORKS.get(sparkCompat);
+    return LOCAL_SPARK_LIBRARIES.get(sparkCompat);
+  }
+
+  /**
+   * Prepares the resources that need to be localized to the Spark client container.
+   *
+   * @param sparkCompat the spark version to prepare for
+   * @param locationFactory the location factory for uploading files
+   * @param tempDir a temporary directory for file creation
+   * @param localizeResources A map from localized name to {@link LocalizeResource} for this method to update
+   * @param env the environment map to update
+   * @throws IOException if failed to prepare the spark resources
+   */
+  public static void prepareSparkResources(SparkCompat sparkCompat, LocationFactory locationFactory, File tempDir,
+                                           Map<String, LocalizeResource> localizeResources,
+                                           Map<String, String> env) throws IOException {
+    Properties sparkConf = getSparkDefaultConf();
+
+    // Localize the spark framework
+    SparkFramework framework = prepareSparkFramework(sparkCompat, locationFactory, tempDir);
+    framework.addLocalizeResource(localizeResources);
+    framework.updateSparkConf(sparkConf);
+    framework.updateSparkEnv(env);
+
+    // Localize the spark-defaults.conf file
+    File sparkDefaultConfFile = saveSparkDefaultConf(sparkConf,
+                                                     File.createTempFile(SPARK_DEFAULTS_CONF, null, tempDir));
+    localizeResources.put(SPARK_DEFAULTS_CONF, new LocalizeResource(sparkDefaultConfFile));
+
+    // Shallow copy all files under directory defined by $HADOOP_CONF_DIR
+    // If $HADOOP_CONF_DIR is not defined, use the location of "yarn-site.xml" to determine the directory
+    // This is part of workaround for CDAP-5019 (SPARK-13441).
+    File hadoopConfDir = null;
+    if (System.getenv().containsKey(ApplicationConstants.Environment.HADOOP_CONF_DIR.key())) {
+      hadoopConfDir = new File(System.getenv(ApplicationConstants.Environment.HADOOP_CONF_DIR.key()));
+    } else {
+      URL yarnSiteLocation = SparkPackageUtils.class.getClassLoader().getResource("yarn-site.xml");
+      if (yarnSiteLocation != null) {
+        try {
+          hadoopConfDir = new File(yarnSiteLocation.toURI()).getParentFile();
+        } catch (URISyntaxException e) {
+          // Shouldn't happen
+          LOG.warn("Failed to derive HADOOP_CONF_DIR from yarn-site.xml");
+        }
+      }
+    }
+    if (hadoopConfDir != null && hadoopConfDir.isDirectory()) {
+      try {
+        final File targetFile = File.createTempFile(LOCALIZED_CONF_DIR, ".zip", tempDir);
+        try (
+          ZipOutputStream zipOutput = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(targetFile)))
+        ) {
+          for (File file : DirUtils.listFiles(hadoopConfDir)) {
+            // Shallow copy of files under the hadoop conf dir. Ignore files that cannot be read
+            if (file.isFile() && file.canRead()) {
+              zipOutput.putNextEntry(new ZipEntry(file.getName()));
+              Files.copy(file.toPath(), zipOutput);
+            }
+          }
+        }
+        localizeResources.put(LOCALIZED_CONF_DIR, new LocalizeResource(targetFile, true));
+      } catch (IOException e) {
+        LOG.warn("Failed to create archive from {}", hadoopConfDir, e);
+      }
+    }
   }
 
   /**
    * Locates the spark-assembly jar from the local file system for Spark1.
    *
+   * @param sparkLibrary file path to the spark-assembly jar in the local file system
+   * @param sparkHome file path to the spark home.
+   *
    * @return the spark-assembly jar location
    * @throws IllegalStateException if cannot locate the spark assembly jar
    */
-  private static File locateSpark1AssemblyJar(String sparkHome) {
+  private static File getSpark1AssemblyJar(@Nullable String sparkLibrary, String sparkHome) {
+    if (sparkLibrary != null) {
+      return new File(sparkLibrary);
+    }
+
     // Look for spark-assembly.jar symlink
     Path assemblyJar = Paths.get(sparkHome, "lib", "spark-assembly.jar");
     if (Files.isSymbolicLink(assemblyJar)) {
@@ -177,80 +257,22 @@ public final class SparkPackageUtils {
     return assemblyJar.toFile();
   }
 
-  private static Set<File> locateSpark2AssemblyJar(String sparkHome) {
+  /**
+   * Finds the set of jar files for the Spark libarary and its dependencies in local file system for Spark2.
+   *
+   * @param sparkLibrary file path to the spark-assembly jar in the local file system
+   * @param sparkHome file path to the spark home.
+   * @return A set of jar files
+   * @throws IllegalStateException if no jar file is found
+   */
+  private static Set<File> getSpark2LibraryJars(@Nullable String sparkLibrary, String sparkHome) {
     // There should be a jars directory under SPARK_HOME.
-    File jarsDir = new File(sparkHome, "jars");
+    File jarsDir = sparkLibrary == null ? new File(sparkHome, "jars") : new File(sparkLibrary);
     Preconditions.checkState(jarsDir.isDirectory(), "Expected %s to be a directory for Spark2", jarsDir);
 
     Set<File> jars = new HashSet<>(DirUtils.listFiles(jarsDir, "jar"));
     Preconditions.checkState(!jars.isEmpty(), "No jar files found in %s for Spark2", jarsDir);
     return jars;
-  }
-
-  /**
-   * Prepares the resources that need to be localized to the Spark client container.
-   *
-   * @param cConf
-   * @param locationFactory
-   * @param tempDir a temporary directory for file creation
-   * @param localizeResources A map from localized name to {@link LocalizeResource} for this method to update
-   */
-  public static void prepareSparkResources(SparkCompat sparkCompat, LocationFactory locationFactory, File tempDir,
-                                           Map<String, LocalizeResource> localizeResources,
-                                           Collection<String> classpath) throws IOException {
-    Properties sparkConf = getSparkDefaultConf();
-
-    // Localize the spark framework
-    LocalizeResource sparkFramework = prepareSparkFramework(sparkCompat, locationFactory);
-    String localizedName = LocalizationUtils.getLocalizedName(sparkFramework.getURI());
-    localizeResources.put(localizedName, sparkFramework);
-    if (sparkConf.getProperty(SPARK_YARN_JAR) == null) {
-      sparkConf.setProperty(SPARK_YARN_JAR, sparkFramework.getURI().toString());
-    }
-
-    classpath.add(localizedName);
-
-    // Localize the spark-defaults.conf file
-    File sparkDefaultConfFile = saveSparkDefaultConf(sparkConf,
-                                                     File.createTempFile(SPARK_DEFAULTS_CONF, null, tempDir));
-    localizeResources.put(SPARK_DEFAULTS_CONF, new LocalizeResource(sparkDefaultConfFile));
-
-    // Shallow copy all files under directory defined by $HADOOP_CONF_DIR
-    // If $HADOOP_CONF_DIR is not defined, use the location of "yarn-site.xml" to determine the directory
-    // This is part of workaround for CDAP-5019 (SPARK-13441).
-    File hadoopConfDir = null;
-    if (System.getenv().containsKey(ApplicationConstants.Environment.HADOOP_CONF_DIR.key())) {
-      hadoopConfDir = new File(System.getenv(ApplicationConstants.Environment.HADOOP_CONF_DIR.key()));
-    } else {
-      URL yarnSiteLocation = SparkPackageUtils.class.getClassLoader().getResource("yarn-site.xml");
-      if (yarnSiteLocation != null) {
-        try {
-          hadoopConfDir = new File(yarnSiteLocation.toURI()).getParentFile();
-        } catch (URISyntaxException e) {
-          // Shouldn't happen
-          LOG.warn("Failed to derive HADOOP_CONF_DIR from yarn-site.xml");
-        }
-      }
-    }
-    if (hadoopConfDir != null && hadoopConfDir.isDirectory()) {
-      try {
-        final File targetFile = File.createTempFile(LOCALIZED_CONF_DIR, ".zip", tempDir);
-        try (
-          ZipOutputStream zipOutput = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(targetFile)))
-        ) {
-          for (File file : DirUtils.listFiles(hadoopConfDir)) {
-            // Shallow copy of files under the hadoop conf dir. Ignore files that cannot be read
-            if (file.isFile() && file.canRead()) {
-              zipOutput.putNextEntry(new ZipEntry(file.getName()));
-              Files.copy(file.toPath(), zipOutput);
-            }
-          }
-        }
-        localizeResources.put(LOCALIZED_CONF_DIR, new LocalizeResource(targetFile, true));
-      } catch (IOException e) {
-        LOG.warn("Failed to create archive from {}", hadoopConfDir, e);
-      }
-    }
   }
 
   /**
@@ -318,6 +340,9 @@ public final class SparkPackageUtils {
     return properties;
   }
 
+  /**
+   * Locates the spark-defaults.conf file location.
+   */
   @Nullable
   private static File locateSparkDefaultsConfFile(Map<String, String> env) {
     File confFile = null;
@@ -332,6 +357,9 @@ public final class SparkPackageUtils {
     return confFile == null || !confFile.isFile() ? null : confFile;
   }
 
+  /**
+   * Saves the spark config into the given file
+   */
   private static File saveSparkDefaultConf(Properties sparkConf, File file) throws IOException {
     try (Writer writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
       sparkConf.store(writer, null);
@@ -340,72 +368,131 @@ public final class SparkPackageUtils {
   }
 
   /**
-   * Prepares the spark framework jar(s) and have it ready on a location.
+   * Prepares the spark framework and have it ready on a location.
    *
    * @param cConf the configuration
    * @param locationFactory the {@link LocationFactory} for storing the spark framework jar(s).
    * @return a {@link LocalizeResource} containing information for the spark framework for file localization
    */
-  private static synchronized LocalizeResource prepareSparkFramework(SparkCompat sparkCompat,
-                                                                     LocationFactory lf) throws IOException {
+  private static synchronized SparkFramework prepareSparkFramework(SparkCompat sparkCompat, LocationFactory lf,
+                                                                   File tempDir) throws IOException {
 
-    if (sparkFramework != null && lf.create(sparkFramework.getURI()).exists()) {
-      return sparkFramework;
+    SparkFramework framework = SPARK_FRAMEWORKS.get(sparkCompat);
+    if (framework != null && framework.getFrameworkLocation(lf).exists()) {
+      return framework;
     }
-    sparkFramework = null;
 
     Properties sparkConf = getSparkDefaultConf();
     switch (sparkCompat) {
-      case SPARK1_2_10: {
-        sparkFramework = prepareSpark1Framework(sparkConf, lf);
-      }
+      case SPARK1_2_10:
+        SPARK_FRAMEWORKS.put(sparkCompat, prepareSpark1Framework(sparkConf, lf));
+      break;
+
+      case SPARK2_2_11:
+        SPARK_FRAMEWORKS.put(sparkCompat, prepareSpark2Framework(sparkConf, lf, tempDir));
       break;
 
       default:
         throw new IllegalArgumentException("Unsupported spark version " + sparkCompat);
     }
 
-    return sparkFramework;
+    return SPARK_FRAMEWORKS.get(sparkCompat);
   }
 
   /**
-   * Prepares the Spark 1 framework on the file system.
+   * Prepares the Spark 1 framework on the location
    *
    * @param sparkConf the spark configuration
    * @param locationFactory the {@link LocationFactory} for saving the spark framework jar
-   * @return A {@link LocalizeResource} containing information about the spark framework in localization context.
+   * @return A {@link SparkFramework} containing information about the spark framework in localization context.
    * @throws IOException If failed to prepare the framework.
    */
-  private static LocalizeResource prepareSpark1Framework(Properties sparkConf,
-                                                         LocationFactory locationFactory) throws IOException {
+  private static SparkFramework prepareSpark1Framework(Properties sparkConf,
+                                                       LocationFactory locationFactory) throws IOException {
     String sparkYarnJar = sparkConf.getProperty(SPARK_YARN_JAR);
 
-    Location frameworkLocation;
     if (sparkYarnJar != null) {
-      frameworkLocation = locationFactory.create(URI.create(sparkYarnJar));
-      if (!frameworkLocation.exists()) {
-        LOG.warn("The location {} set by '{}' does not exist.", frameworkLocation, SPARK_YARN_JAR);
-        return null;
+      Location frameworkLocation = locationFactory.create(URI.create(sparkYarnJar));
+      if (frameworkLocation.exists()) {
+        return new SparkFramework(new LocalizeResource(resolveURI(frameworkLocation), false), SPARK_YARN_JAR);
       }
-    } else {
-      // If spark.yarn.jar is not defined, get the spark-assembly jar from local FS and upload it
-      File sparkAssemblyJar = Iterables.getFirst(getLocalSparkFramework(SparkCompat.SPARK1_2_10), null);
-      Location frameworkDir = locationFactory.create("/framework/spark");
+      LOG.warn("The location {} set by '{}' does not exist.", frameworkLocation, SPARK_YARN_JAR);
+    }
 
-      frameworkLocation = frameworkDir.append(sparkAssemblyJar.getName());
+    // If spark.yarn.jar is not defined or doesn't exists, get the spark-assembly jar from local FS and upload it
+    File sparkAssemblyJar = Iterables.getFirst(getLocalSparkLibrary(SparkCompat.SPARK1_2_10), null);
+    Location frameworkDir = locationFactory.create("/framework/spark");
+    Location frameworkLocation = frameworkDir.append(sparkAssemblyJar.getName());
 
-      // Upload assembly jar to the framework location if not exists
-      if (!frameworkLocation.exists()) {
+    // Upload assembly jar to the framework location if not exists
+    if (!frameworkLocation.exists()) {
+      frameworkDir.mkdirs("755");
+
+      try (OutputStream os = frameworkLocation.getOutputStream("644")) {
+        Files.copy(sparkAssemblyJar.toPath(), os);
+      }
+    }
+    return new SparkFramework(new LocalizeResource(resolveURI(frameworkLocation), false), SPARK_YARN_JAR);
+  }
+
+  /**
+   * Prepares the Spark 2 framework on the location.
+   *
+   * @param sparkConf the spark configuration
+   * @param locationFactory the {@link LocationFactory} for saving the spark framework jar
+   * @param tempDir directory for temporary file creation
+   * @return A {@link SparkFramework} containing information about the spark framework in localization context.
+   * @throws IOException If failed to prepare the framework.
+   */
+  private static SparkFramework prepareSpark2Framework(Properties sparkConf, LocationFactory locationFactory,
+                                                       File tempDir) throws IOException {
+    String sparkYarnArchive = sparkConf.getProperty(SPARK_YARN_ARCHIVE);
+
+    if (sparkYarnArchive != null) {
+      Location frameworkLocation = locationFactory.create(URI.create(sparkYarnArchive));
+      if (frameworkLocation.exists()) {
+        return new SparkFramework(new LocalizeResource(resolveURI(frameworkLocation), true), SPARK_YARN_ARCHIVE);
+      }
+      LOG.warn("The location {} set by '{}' does not exist.", frameworkLocation, SPARK_YARN_ARCHIVE);
+    }
+
+    // If spark.yarn.archive is not defined or doesn't exists, build a archive zip from local FS and upload it
+    String sparkVersion = System.getenv(SPARK_VERSION);
+    sparkVersion = sparkVersion == null ? SparkCompat.SPARK2_2_11.getCompat() : sparkVersion;
+
+    String archiveName = "spark.archive-" + sparkVersion + ".zip";
+    Location frameworkDir = locationFactory.create("/framework/spark");
+    Location frameworkLocation = frameworkDir.append(archiveName);
+
+    if (!frameworkLocation.exists()) {
+      File archive = new File(tempDir, archiveName);
+      try {
+        try (ZipOutputStream zipOutput = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(archive)))) {
+          zipOutput.setLevel(Deflater.NO_COMPRESSION);
+          for (File file : getLocalSparkLibrary(SparkCompat.SPARK2_2_11)) {
+            zipOutput.putNextEntry(new ZipEntry(file.getName()));
+            Files.copy(file.toPath(), zipOutput);
+            zipOutput.closeEntry();
+          }
+        }
+
+        // Upload spark archive to the framework location
         frameworkDir.mkdirs("755");
 
         try (OutputStream os = frameworkLocation.getOutputStream("644")) {
-          Files.copy(sparkAssemblyJar.toPath(), os);
+          Files.copy(archive.toPath(), os);
         }
+      } finally {
+        archive.delete();
       }
     }
-    return new LocalizeResource(resolveURI(frameworkLocation), false);
+    return new SparkFramework(new LocalizeResource(resolveURI(frameworkLocation), true), SPARK_YARN_ARCHIVE);
   }
 
+  /**
+   * Resolves a {@link URI} representation from the given {@link Location}. It resolves the URI in the same way
+   * as Spark does.
+   */
   private static URI resolveURI(Location location) throws IOException {
     LocationFactory locationFactory = location.getLocationFactory();
 
@@ -424,5 +511,34 @@ public final class SparkPackageUtils {
   }
 
   private SparkPackageUtils() {
+  }
+
+  /**
+   * Class to representing spark framework resource
+   */
+  private static final class SparkFramework {
+    private final LocalizeResource localizeResource;
+    private final String configKey;
+
+    SparkFramework(LocalizeResource localizeResource, String configKey) {
+      this.localizeResource = localizeResource;
+      this.configKey = configKey;
+    }
+
+    Location getFrameworkLocation(LocationFactory lf) {
+      return lf.create(localizeResource.getURI());
+    }
+
+    void addLocalizeResource(Map<String, LocalizeResource> resources) {
+      resources.put(LocalizationUtils.getLocalizedName(localizeResource.getURI()), localizeResource);
+    }
+
+    void updateSparkConf(Properties sparkConf) {
+      sparkConf.setProperty(configKey, localizeResource.getURI().toString());
+    }
+
+    void updateSparkEnv(Map<String, String> env) {
+      env.put(SPARK_LIBRARY, LocalizationUtils.getLocalizedName(localizeResource.getURI()));
+    }
   }
 }

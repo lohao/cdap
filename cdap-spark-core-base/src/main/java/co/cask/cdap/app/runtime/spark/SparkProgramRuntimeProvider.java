@@ -297,7 +297,7 @@ public abstract class SparkProgramRuntimeProvider implements ProgramRuntimeProvi
     // This class cannot have dependency on Spark directly, hence using the class resource to discover if SparkContext
     // is there
     if (classLoader.getResource("org/apache/spark/SparkContext.class") == null) {
-      for (File file : SparkPackageUtils.getLocalSparkFramework(providerSparkCompat)) {
+      for (File file : SparkPackageUtils.getLocalSparkLibrary(providerSparkCompat)) {
         urls.add(file.toURI().toURL());
       }
     }

@@ -61,10 +61,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -146,17 +144,15 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
     // Add runnable. Only one instance for the spark client
     launchConfig.addRunnable(spec.getName(), new SparkTwillRunnable(spec.getName()), resources, 1);
 
-    Map<String, LocalizeResource> localizeResources = new HashMap<>();
-    List<String> classpath = new ArrayList<>();
-    SparkPackageUtils.prepareSparkResources(sparkCompat, locationFactory, tempDir, localizeResources, classpath);
-
     // Add extra resources, classpath, dependencies, env and setup ClassAcceptor
+    Map<String, LocalizeResource> localizeResources = new HashMap<>();
     Map<String, String> extraEnv = new HashMap<>(SparkPackageUtils.getSparkClientEnv());
+    SparkPackageUtils.prepareSparkResources(sparkCompat, locationFactory, tempDir, localizeResources, extraEnv);
+
     extraEnv.put(Constants.SPARK_COMPAT_ENV, sparkCompat.getCompat());
 
     launchConfig
       .addExtraResources(localizeResources)
-      .addExtraClasspath(classpath)
       .addExtraDependencies(SparkProgramRuntimeProvider.class)
       .addExtraEnv(extraEnv)
       .setClassAcceptor(createBundlerClassAcceptor());
@@ -165,7 +161,7 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
 
   private ClassAcceptor createBundlerClassAcceptor() throws MalformedURLException {
     final Set<URL> urls = new HashSet<>();
-    for (File file : SparkPackageUtils.getLocalSparkFramework(sparkCompat)) {
+    for (File file : SparkPackageUtils.getLocalSparkLibrary(sparkCompat)) {
       urls.add(file.toURI().toURL());
     }
 
