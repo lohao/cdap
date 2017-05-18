@@ -369,9 +369,6 @@ public class ArtifactRepositoryTest {
         }
       }
     }
-
-
-
   }
 
   @Test
