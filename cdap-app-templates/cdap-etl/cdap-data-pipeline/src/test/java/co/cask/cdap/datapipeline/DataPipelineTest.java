@@ -399,40 +399,6 @@ public class DataPipelineTest extends HydratorTestBase {
   }
 
   @Test
-  public void testIntToStringConversion() throws Exception {
-
-    int jsonCode = 27878; // should be some odd number
-    String jsonCodeString = String.valueOf(jsonCode);
-    Gson GSON = new GsonBuilder()
-      .registerTypeAdapterFactory(new CaseInsensitiveEnumTypeAdapterFactory())
-      .create();
-
-    Schema inputSchema = Schema.recordOf("user",
-                                         Schema.Field.of("name", Schema.of(Schema.Type.STRING)),
-                                         Schema.Field.of("id", Schema.of(Schema.Type.INT)));
-    ETLBatchConfig config = ETLBatchConfig.builder("* * * * *")
-      .setEngine(Engine.MAPREDUCE)
-      .addStage(new ETLStage("source1", MockSource.getPlugin("source1", inputSchema)))
-      .addStage(new ETLStage("errorfilter", FilterErrorTransform.getPlugin(jsonCode)))
-      .addStage(new ETLStage("sink1", MockSink.getPlugin("sink1")))
-      .addConnection("source1", "errorfilter")
-      .addConnection("errorfilter", "sink1")
-      .build();
-
-    // test with quotes around jsonCode
-    AppRequest<ETLBatchConfig> appRequest = new AppRequest<>(APP_ARTIFACT, config);
-    String jsonConfig = GSON.toJson(appRequest);
-    AppRequest<?> convertedAppRequest = GSON.fromJson(jsonConfig, AppRequest.class);
-    ApplicationId appId = NamespaceId.DEFAULT.app("IntStringTest");
-    deployApplication(appId.toId(), convertedAppRequest);
-
-    // test without quotes around jsonCode
-    jsonConfig = jsonConfig.replaceAll("\"" + jsonCodeString + "\"", jsonCodeString);
-    convertedAppRequest = GSON.fromJson(jsonConfig, AppRequest.class);
-    deployApplication(appId.toId(), convertedAppRequest);
-  }
-
-  @Test
   public void testPipelineWithAllActions() throws Exception {
     String actionTable = "actionTable";
     String action1RowKey = "action1.row";

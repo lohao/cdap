@@ -32,6 +32,7 @@ import co.cask.cdap.common.InvalidArtifactException;
 import co.cask.cdap.common.conf.ArtifactConfig;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
+import co.cask.cdap.common.io.CaseInsensitiveEnumTypeAdapterFactory;
 import co.cask.cdap.common.io.Locations;
 import co.cask.cdap.common.lang.FilterClassLoader;
 import co.cask.cdap.common.lang.jar.BundleJarUtil;
@@ -63,6 +64,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.inject.Injector;
 import org.apache.twill.filesystem.LocalLocationFactory;
 import org.apache.twill.filesystem.Location;
@@ -73,6 +76,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.json.JSONObject;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -311,6 +315,63 @@ public class ArtifactRepositoryTest {
         }
       }
     }
+  }
+
+  @Test
+  public void testPluginJsonStringToInt() throws Exception {
+    int jsonCode = 42; // should be some odd number
+    String jsonCodeString = String.valueOf(jsonCode);
+    Gson GSON = new GsonBuilder()
+      .registerTypeAdapterFactory(new CaseInsensitiveEnumTypeAdapterFactory())
+      .create();
+
+    File pluginDir = getFile();
+    SortedMap<ArtifactDescriptor, Set<PluginClass>> plugins = getPlugins();
+    copyArtifacts(pluginDir, plugins);
+
+    // Instantiate the plugins and execute them
+    try (PluginInstantiator instantiator = new PluginInstantiator(cConf, appClassLoader, pluginDir)) {
+      for (Map.Entry<ArtifactDescriptor, Set<PluginClass>> entry : plugins.entrySet()) {
+        for (PluginClass pluginClass : entry.getValue()) {
+          Plugin pluginInfo = new Plugin(entry.getKey().getArtifactId(), pluginClass,
+                                         PluginProperties.builder().add("class.name", TEST_EMPTY_CLASS)
+                                           .add("nullableLongFlag", jsonCodeString)
+                                           .add("host", "example.com")
+                                           .add("aBoolean", "${aBoolean}")
+                                           .add("aByte", jsonCodeString)
+                                           .add("aChar", "${aChar}")
+                                           .add("aDouble", "${aDouble}")
+                                           .add("anInt", jsonCodeString)
+                                           .add("aFloat", "${aFloat}")
+                                           .add("aLong", jsonCodeString)
+                                           .add("aShort", jsonCodeString)
+                                           .build());
+
+          // first test with quotes ("42")
+          String jsonPluginStr = GSON.toJson(pluginInfo);
+          pluginInfo = GSON.fromJson(jsonPluginStr, Plugin.class);
+          instantiator.newInstance(pluginInfo);
+
+          // test without quotes (42)
+          pluginInfo = GSON.fromJson(jsonPluginStr
+                           .replaceAll("\"" + jsonCodeString + "\"", jsonCodeString), Plugin.class);
+          instantiator.newInstance(pluginInfo);
+
+          // test with quotes and dot ("42.0")
+          pluginInfo = GSON.fromJson(jsonPluginStr
+                           .replaceAll(jsonCodeString, jsonCodeString + ".0"), Plugin.class);
+          instantiator.newInstance(pluginInfo);
+
+          // test with dot (42.0)
+          pluginInfo = GSON.fromJson(jsonPluginStr
+                           .replaceAll("\"" + jsonCodeString + "\"",jsonCodeString + ".0"), Plugin.class);
+          instantiator.newInstance(pluginInfo);
+        }
+      }
+    }
+
+
+
   }
 
   @Test
