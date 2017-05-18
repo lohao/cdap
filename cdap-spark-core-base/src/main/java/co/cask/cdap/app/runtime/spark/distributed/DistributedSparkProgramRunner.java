@@ -59,11 +59,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A {@link ProgramRunner} for launching {@link Spark} program in distributed mode. It starts
@@ -145,7 +148,7 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
 
     Map<String, LocalizeResource> localizeResources = new HashMap<>();
     List<String> classpath = new ArrayList<>();
-    SparkPackageUtils.prepareSparkResources(cConf, locationFactory, tempDir, localizeResources, classpath);
+    SparkPackageUtils.prepareSparkResources(sparkCompat, locationFactory, tempDir, localizeResources, classpath);
 
     // Add extra resources, classpath, dependencies, env and setup ClassAcceptor
     Map<String, String> extraEnv = new HashMap<>(SparkPackageUtils.getSparkClientEnv());
@@ -160,13 +163,17 @@ public final class DistributedSparkProgramRunner extends DistributedProgramRunne
   }
 
 
-  private ClassAcceptor createBundlerClassAcceptor() {
-    final File sparkAssemblyJar = SparkPackageUtils.locateSparkAssemblyJar();
+  private ClassAcceptor createBundlerClassAcceptor() throws MalformedURLException {
+    final Set<URL> urls = new HashSet<>();
+    for (File file : SparkPackageUtils.getLocalSparkFramework(sparkCompat)) {
+      urls.add(file.toURI().toURL());
+    }
+
     return new HadoopClassExcluder() {
       @Override
       public boolean accept(String className, URL classUrl, URL classPathUrl) {
         // Exclude both hadoop and spark classes.
-        if (sparkAssemblyJar != null && sparkAssemblyJar.equals(classPathUrl)) {
+        if (urls.contains(classPathUrl)) {
           return false;
         }
         return super.accept(className, classUrl, classPathUrl)

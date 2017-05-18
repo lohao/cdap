@@ -38,6 +38,7 @@ import com.google.inject.spi.InstanceBinding;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -292,11 +293,13 @@ public abstract class SparkProgramRuntimeProvider implements ProgramRuntimeProvi
   private URL[] getSparkClassloaderURLs(ClassLoader classLoader) throws IOException {
     List<URL> urls = ClassLoaders.getClassLoaderURLs(classLoader, new ArrayList<URL>());
 
-    // If Spark classes are not available in the given ClassLoader, try to locate the Spark assembly jar
+    // If Spark classes are not available in the given ClassLoader, try to locate the Spark framework
     // This class cannot have dependency on Spark directly, hence using the class resource to discover if SparkContext
     // is there
     if (classLoader.getResource("org/apache/spark/SparkContext.class") == null) {
-      urls.add(SparkPackageUtils.locateSparkAssemblyJar().toURI().toURL());
+      for (File file : SparkPackageUtils.getLocalSparkFramework(providerSparkCompat)) {
+        urls.add(file.toURI().toURL());
+      }
     }
     return urls.toArray(new URL[urls.size()]);
   }

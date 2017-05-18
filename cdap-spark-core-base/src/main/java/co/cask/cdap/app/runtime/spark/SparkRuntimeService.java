@@ -31,6 +31,7 @@ import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.CConfigurationUtil;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.io.Locations;
+import co.cask.cdap.common.lang.ClassLoaders;
 import co.cask.cdap.common.lang.PropertyFieldSetter;
 import co.cask.cdap.common.logging.LoggingContextAccessor;
 import co.cask.cdap.common.utils.DirUtils;
@@ -75,6 +76,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -513,14 +515,17 @@ final class SparkRuntimeService extends AbstractExecutionThreadService {
    * @return list of jar file name that contains all dependency jars in sorted order
    * @throws IOException if failed to package the jar
    */
-  private Iterable<String> buildDependencyJar(File targetFile) throws IOException {
+  private Iterable<String> buildDependencyJar(File targetFile) throws IOException, URISyntaxException {
     Set<String> classpath = new TreeSet<>();
     try (JarOutputStream jarOut = new JarOutputStream(new BufferedOutputStream(new FileOutputStream(targetFile)))) {
       jarOut.setLevel(Deflater.NO_COMPRESSION);
 
-      // Zip all the jar files under the application.jar/lib directory
+      // Zip all the jar files under the same directory that contains the jar for this class.
       // This is the directory created by TWILL that contains all dependency jars for this container
-      for (File file : DirUtils.listFiles(new File("application.jar", "lib"), "jar")) {
+      URL classURL = getClass().getClassLoader().getResource(getClass().getName().replace('.', '/') + ".class");
+      File libDir = new File(ClassLoaders.getClassPathURL(getClass().getName(), classURL).toURI()).getParentFile();
+
+      for (File file : DirUtils.listFiles(libDir, "jar")) {
         jarOut.putNextEntry(new JarEntry(file.getName()));
         Files.copy(file, jarOut);
         jarOut.closeEntry();
