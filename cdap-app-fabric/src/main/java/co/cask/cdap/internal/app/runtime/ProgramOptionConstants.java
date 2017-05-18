@@ -45,6 +45,8 @@ public final class ProgramOptionConstants {
 
   public static final String WORKFLOW_NAME = "workflowName";
 
+  public static final String SCHEDULE_ID = "scheduleId";
+
   public static final String SCHEDULE_NAME = "scheduleName";
 
   public static final String RUN_DATA_SIZE = "runDataSize";

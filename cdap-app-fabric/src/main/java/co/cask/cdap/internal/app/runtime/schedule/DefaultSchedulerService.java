@@ -16,13 +16,11 @@
 
 package co.cask.cdap.internal.app.runtime.schedule;
 
-import co.cask.cdap.api.schedule.SchedulableProgramType;
 import co.cask.cdap.app.store.Store;
-import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.messaging.MessagingService;
-import co.cask.cdap.proto.ProgramType;
 import co.cask.cdap.proto.id.ApplicationId;
-import co.cask.cdap.proto.id.ProgramId;
+import co.cask.cdap.proto.id.ScheduleId;
+import co.cask.cdap.proto.id.TopicId;
 import com.google.common.base.Preconditions;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
@@ -46,8 +44,8 @@ public class DefaultSchedulerService {
     private static final Logger LOG = LoggerFactory.getLogger(ScheduledJob.class);
     private final ScheduleTaskPublisher taskPublisher;
 
-    ScheduledJob(Store store, MessagingService messagingService, CConfiguration cConf) {
-      this.taskPublisher = new ScheduleTaskPublisher(store, messagingService, cConf);
+    ScheduledJob(Store store, MessagingService messagingService, TopicId topicId) {
+      this.taskPublisher = new ScheduleTaskPublisher(store, messagingService, topicId);
     }
 
     @Override
@@ -63,20 +61,18 @@ public class DefaultSchedulerService {
       String namespaceId = parts[0];
       String applicationId = parts[1];
       String appVersion = parts[2];
-      ProgramType programType = ProgramType.valueOfSchedulableType(SchedulableProgramType.valueOf(parts[3]));
-      String programName = parts[4];
+      // Skip program type in parts[3] and program name in parts[4]
       String scheduleName = parts[5];
 
       LOG.debug("Schedule execute {}", key);
 
-      ProgramId programId = new ApplicationId(namespaceId, applicationId, appVersion).program(programType, programName);
+      ScheduleId scheduleId = new ApplicationId(namespaceId, applicationId, appVersion).schedule(scheduleName);
       try {
-        taskPublisher.publishNotification(programId, scheduleName, context.getRefireCount(),
-                                          context.getScheduledFireTime().getTime());
+        taskPublisher.publishNotification(scheduleId, context.getScheduledFireTime().getTime());
       } catch (Throwable t) {
         // Do not remove this log line. The exception at higher level gets caught by the quartz scheduler and is not
         // logged in cdap master logs making it hard to debug issues.
-        LOG.warn("Error while publishing notification for program {}. {}", programId, t);
+        LOG.warn("Error while publishing notification for schedule {}. {}", scheduleId, t);
         throw new JobExecutionException(t.getMessage(), t.getCause(), false);
       }
     }
