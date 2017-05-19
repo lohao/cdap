@@ -202,6 +202,7 @@ public class ArtifactRepository {
                                                     ArtifactSortOrder order) throws Exception {
     List<ArtifactSummary> summaries = new ArrayList<>();
     List<ArtifactSummary> artifacts = convertAndAdd(summaries, artifactStore.getArtifacts(range, limit, order));
+    // todo - CDAP-11560 should filter in artifact store
     return Collections.unmodifiableList(Lists.newArrayList(filterAuthorizedArtifacts(
       artifacts, new NamespaceId(range.getNamespace()))));
   }
@@ -794,6 +795,7 @@ public class ArtifactRepository {
                                   input.getMeta().getUsableBy());
         }
       });
+    // todo - CDAP-11560 should filter in artifact store
     return Collections.unmodifiableList(filterAuthorizedArtifactInfos(artifactInfoList, namespace));
   }
 

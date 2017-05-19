@@ -29,8 +29,6 @@ import co.cask.cdap.common.internal.remote.RemoteClient;
 import co.cask.cdap.common.io.Locations;
 import co.cask.cdap.common.lang.DirectoryClassLoader;
 import co.cask.cdap.common.lang.jar.BundleJarUtil;
-import co.cask.cdap.common.service.Retries;
-import co.cask.cdap.common.service.RetryStrategy;
 import co.cask.cdap.common.utils.DirUtils;
 import co.cask.cdap.internal.guava.reflect.TypeToken;
 import co.cask.cdap.internal.io.SchemaTypeAdapter;
@@ -100,12 +98,10 @@ public class DefaultArtifactManager {
    * If the app-fabric service is unavailable, it will be retried based on the passed in retry strategy.
    *
    * @param namespaceId namespace
-   * @param retryStrategy retry strategy
    * @return {@link List<ArtifactInfo>}
    * @throws IOException If there are any exception while retrieving artifacts
    */
-  public List<ArtifactInfo> listArtifacts(final NamespaceId namespaceId,
-                                          RetryStrategy retryStrategy) throws IOException {
+  public List<ArtifactInfo> listArtifacts(final NamespaceId namespaceId) throws IOException {
     HttpRequest.Builder requestBuilder =
       remoteClient.requestBuilder(HttpMethod.GET,
                                   String.format("namespaces/%s/artifact-internals/artifacts",
@@ -114,15 +110,7 @@ public class DefaultArtifactManager {
     if (authorizationEnabled) {
       requestBuilder.addHeader(Constants.Security.Headers.USER_ID, authenticationContext.getPrincipal().getName());
     }
-
-    final HttpRequest httpRequest = requestBuilder.build();
-
-    return Retries.callWithRetries(new Retries.Callable<List<ArtifactInfo>, IOException>() {
-      @Override
-      public List<ArtifactInfo> call() throws IOException {
-        return getArtifactsList(httpRequest);
-      }
-    }, retryStrategy);
+    return getArtifactsList(requestBuilder.build());
   }
 
   /**
@@ -134,13 +122,12 @@ public class DefaultArtifactManager {
    * @param namespaceId artifact namespace
    * @param artifactInfo artifact info whose artiact will be unpacked to create classloader
    * @param parentClassLoader  optional parent classloader, if null bootstrap classloader will be used
-   * @param retryStrategy retry strategy
    * @return CloseableClassLoader call close on this CloseableClassLoader for cleanup
    * @throws IOException if artifact is not found or there were any error while getting artifact
    */
   public CloseableClassLoader createClassLoader(
-    final NamespaceId namespaceId, final ArtifactInfo artifactInfo, @Nullable final ClassLoader parentClassLoader,
-    RetryStrategy retryStrategy) throws IOException {
+    NamespaceId namespaceId, ArtifactInfo artifactInfo,
+    @Nullable ClassLoader parentClassLoader) throws IOException {
 
     String namespace = ArtifactScope.SYSTEM.equals(artifactInfo.getScope()) ?
       NamespaceId.SYSTEM.getNamespace() : namespaceId.getEntityName();
@@ -153,14 +140,8 @@ public class DefaultArtifactManager {
     if (authorizationEnabled) {
       requestBuilder.addHeader(Constants.Security.Headers.USER_ID, authenticationContext.getPrincipal().getName());
     }
-    final HttpRequest httpRequest = requestBuilder.build();
 
-    return Retries.callWithRetries(new Retries.Callable<CloseableClassLoader, IOException>() {
-      @Override
-      public CloseableClassLoader call() throws IOException {
-        return createAndGetClassLoader(httpRequest, artifactInfo, parentClassLoader);
-      }
-    }, retryStrategy);
+    return createAndGetClassLoader(requestBuilder.build(), artifactInfo, parentClassLoader);
   }
 
   private List<ArtifactInfo> getArtifactsList(HttpRequest httpRequest) throws IOException {
@@ -170,7 +151,7 @@ public class DefaultArtifactManager {
       throw new IOException("Could not list artifacts, endpoint not found");
     }
 
-    if (isSuccessful(httpResponse.getResponseCode())) {
+    if (httpResponse.getResponseCode() == 200) {
       List<ArtifactInfo> artifactInfoList =
         GSON.fromJson(httpResponse.getResponseBodyAsString(), ARTIFACT_INFO_LIST_TYPE);
       return artifactInfoList;
@@ -178,10 +159,6 @@ public class DefaultArtifactManager {
       throw new IOException(String.format("Exception while getting artifacts list %s",
                                           httpResponse.getResponseBodyAsString()));
     }
-  }
-
-  private boolean isSuccessful(int responseCode) {
-    return responseCode == 200;
   }
 
   private CloseableClassLoader createAndGetClassLoader(HttpRequest httpRequest,
@@ -193,14 +170,14 @@ public class DefaultArtifactManager {
       throw new IOException("Could not get artifact detail, endpoint not found");
     }
 
-    if (isSuccessful(httpResponse.getResponseCode())) {
+    if (httpResponse.getResponseCode() == 200) {
       String path = httpResponse.getResponseBodyAsString();
       Location location = Locations.getLocationFromAbsolutePath(locationFactory, path);
       if (!location.exists()) {
         throw new IOException(String.format("Artifact Location does not exist %s for artifact %s version %s",
                                             path, artifactInfo.getName(), artifactInfo.getVersion()));
       }
-      final File unpackedDir = DirUtils.createTempDir(tmpDir);
+      File unpackedDir = DirUtils.createTempDir(tmpDir);
       BundleJarUtil.unJar(location, unpackedDir);
 
       return new CloseableClassLoader(
