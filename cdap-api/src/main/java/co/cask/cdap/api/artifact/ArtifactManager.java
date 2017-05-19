@@ -34,12 +34,12 @@ public interface ArtifactManager {
 
   /**
    * Create a class loader using the artifact represented by artifactInfo with parent as parentClassloader
-   * Call to this method might take long based on the size of artifact,
-   * if called from short transactions, its possible this call will timeout if artifact size is big
+   * Call to this method might take a long time based on the size of the artifact.
+   * If called from short transactions, it is possible this call will timeout if the artifact size is large
    *
    * @param artifactInfo artifact info
    * @param parentClassLoader parent class loader, if null bootstrap classLoader shall be used as parent
-   * @throws IOException if there were any exception while creating the class loader
+   * @throws IOException if there were any exception while creating the class loader or if the artifact is not found
    * @return Closeable class loader, calling close on this does the necessary cleanup.
    */
   CloseableClassLoader createClassLoader(ArtifactInfo artifactInfo,

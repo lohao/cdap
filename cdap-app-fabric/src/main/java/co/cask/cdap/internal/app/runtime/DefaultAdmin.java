@@ -193,12 +193,12 @@ public class DefaultAdmin extends DefaultDatasetManager implements Admin {
 
   @Override
   public List<ArtifactInfo> listArtifacts() throws IOException {
-    return defaultArtifactManager.listArtifacts(namespaceId);
+    return defaultArtifactManager.listArtifacts(namespaceId, retryStrategy);
   }
 
   @Override
   public CloseableClassLoader createClassLoader(ArtifactInfo artifactInfo,
                                                 @Nullable ClassLoader parentClassLoader) throws IOException {
-    return defaultArtifactManager.createClassLoader(namespaceId, artifactInfo, parentClassLoader);
+    return defaultArtifactManager.createClassLoader(namespaceId, artifactInfo, parentClassLoader, retryStrategy);
   }
 }

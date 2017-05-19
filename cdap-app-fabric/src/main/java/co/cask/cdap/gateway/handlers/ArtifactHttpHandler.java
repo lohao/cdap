@@ -122,6 +122,7 @@ public class ArtifactHttpHandler extends AbstractHttpHandler {
   private static final Type APPCLASS_SUMMARIES_TYPE = new TypeToken<List<ApplicationClassSummary>>() { }.getType();
   private static final Type APPCLASS_INFOS_TYPE = new TypeToken<List<ApplicationClassInfo>>() { }.getType();
   private static final Type MAP_STRING_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
+  private static final Type ARTIFACT_INFO_LIST_TYPE = new TypeToken<List<ArtifactInfo>>() { }.getType();
   private static final Gson GSON = new GsonBuilder()
     .registerTypeAdapter(Schema.class, new SchemaTypeAdapter())
     .registerTypeAdapter(PluginClass.class, new PluginClassDeserializer())
@@ -748,8 +749,7 @@ public class ArtifactHttpHandler extends AbstractHttpHandler {
       List<ArtifactInfo> artifactInfoList = new ArrayList<>();
       artifactInfoList.addAll(artifactRepository.getArtifactsInfo(new NamespaceId(namespaceId)));
       artifactInfoList.addAll(artifactRepository.getArtifactsInfo(NamespaceId.SYSTEM));
-      responder.sendJson(HttpResponseStatus.OK, artifactInfoList,
-                         new TypeToken<List<ArtifactInfo>>() { }.getType(), GSON);
+      responder.sendJson(HttpResponseStatus.OK, artifactInfoList, ARTIFACT_INFO_LIST_TYPE, GSON);
     } catch (Exception e) {
       LOG.warn("Exception reading artifact metadata for namespace {} from the store.", namespaceId, e);
       responder.sendString(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Error reading artifact metadata from the store.");
