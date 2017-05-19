@@ -17,7 +17,6 @@
 package co.cask.cdap.internal.app.runtime.artifact;
 
 import co.cask.cdap.api.app.Application;
-import co.cask.cdap.api.artifact.ArtifactDescriptor;
 import co.cask.cdap.api.artifact.ArtifactId;
 import co.cask.cdap.api.artifact.ArtifactRange;
 import co.cask.cdap.api.artifact.ArtifactVersion;

@@ -18,7 +18,7 @@ package co.cask.cdap.internal.app.runtime.artifact;
 
 import co.cask.cdap.api.artifact.ArtifactRange;
 import co.cask.cdap.api.artifact.InvalidArtifactRangeException;
-import co.cask.cdap.proto.artifact.ArtifactUtil;
+import co.cask.cdap.proto.artifact.ArtifactRanges;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
@@ -38,7 +38,7 @@ public class ArtifactRangeCodec implements JsonDeserializer<ArtifactRange>, Json
   public ArtifactRange deserialize(JsonElement json, Type typeOfT,
                                    JsonDeserializationContext context) throws JsonParseException {
     try {
-      return ArtifactUtil.parseArtifactRange(json.getAsString());
+      return ArtifactRanges.parseArtifactRange(json.getAsString());
     } catch (InvalidArtifactRangeException e) {
       throw new JsonParseException(e);
     }

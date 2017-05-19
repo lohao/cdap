@@ -25,9 +25,9 @@ import co.cask.cdap.proto.id.NamespaceId;
 /**
  * Utility class for parsing {@link ArtifactRange}
  */
-public final class ArtifactUtil {
+public final class ArtifactRanges {
 
-  private ArtifactUtil() {
+  private ArtifactRanges() {
 
   }
 

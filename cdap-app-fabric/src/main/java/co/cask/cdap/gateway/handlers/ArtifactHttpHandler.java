@@ -17,7 +17,6 @@
 package co.cask.cdap.gateway.handlers;
 
 import co.cask.cdap.api.annotation.Beta;
-import co.cask.cdap.api.artifact.ArtifactDescriptor;
 import co.cask.cdap.api.artifact.ArtifactInfo;
 import co.cask.cdap.api.artifact.ArtifactRange;
 import co.cask.cdap.api.artifact.ArtifactScope;
@@ -41,6 +40,7 @@ import co.cask.cdap.common.http.AbstractBodyConsumer;
 import co.cask.cdap.common.namespace.NamespaceQueryAdmin;
 import co.cask.cdap.common.security.AuditDetail;
 import co.cask.cdap.common.security.AuditPolicy;
+import co.cask.cdap.internal.app.runtime.artifact.ArtifactDescriptor;
 import co.cask.cdap.internal.app.runtime.artifact.ArtifactDetail;
 import co.cask.cdap.internal.app.runtime.artifact.ArtifactRepository;
 import co.cask.cdap.internal.app.runtime.artifact.WriteConflictException;
@@ -51,8 +51,8 @@ import co.cask.cdap.internal.io.SchemaTypeAdapter;
 import co.cask.cdap.proto.Id;
 import co.cask.cdap.proto.artifact.ApplicationClassInfo;
 import co.cask.cdap.proto.artifact.ApplicationClassSummary;
+import co.cask.cdap.proto.artifact.ArtifactRanges;
 import co.cask.cdap.proto.artifact.ArtifactSortOrder;
-import co.cask.cdap.proto.artifact.ArtifactUtil;
 import co.cask.cdap.proto.artifact.PluginInfo;
 import co.cask.cdap.proto.artifact.PluginSummary;
 import co.cask.cdap.proto.id.ArtifactId;
@@ -742,7 +742,7 @@ public class ArtifactHttpHandler extends AbstractHttpHandler {
 
   // the following endpoints with path "artifact-internals" are only called by CDAP programs, not exposed via router.
   @GET
-  @Path("/namespaces/{namespace-id}/artifact-internals/list/artifacts")
+  @Path("/namespaces/{namespace-id}/artifact-internals/artifacts")
   public void listArtifactsInternal(HttpRequest request, HttpResponder responder,
                                     @PathParam("namespace-id") String namespaceId) {
     try {
@@ -835,7 +835,7 @@ public class ArtifactHttpHandler extends AbstractHttpHandler {
         ArtifactRange range;
         // try parsing it as a namespaced range like system:etl-batch[1.0.0,2.0.0)
         try {
-          range = ArtifactUtil.parseArtifactRange(parent);
+          range = ArtifactRanges.parseArtifactRange(parent);
           // only support extending an artifact that is in the same namespace, or system namespace
           if (!NamespaceId.SYSTEM.getNamespace().equals(range.getNamespace()) &&
             !namespace.getNamespace().equals(range.getNamespace())) {
@@ -845,7 +845,7 @@ public class ArtifactHttpHandler extends AbstractHttpHandler {
         } catch (InvalidArtifactRangeException e) {
           // if this failed, try parsing as a non-namespaced range like etl-batch[1.0.0,2.0.0)
           try {
-            range = ArtifactUtil.parseArtifactRange(namespace.getNamespace(), parent);
+            range = ArtifactRanges.parseArtifactRange(namespace.getNamespace(), parent);
           } catch (InvalidArtifactRangeException e1) {
             throw new BadRequestException(String.format("Invalid artifact range %s: %s", parent, e1.getMessage()));
           }

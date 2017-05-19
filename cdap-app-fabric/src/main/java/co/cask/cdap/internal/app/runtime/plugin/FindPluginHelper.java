@@ -16,7 +16,6 @@
 
 package co.cask.cdap.internal.app.runtime.plugin;
 
-import co.cask.cdap.api.artifact.ArtifactDescriptor;
 import co.cask.cdap.api.artifact.ArtifactId;
 import co.cask.cdap.api.artifact.ArtifactRange;
 import co.cask.cdap.api.plugin.Plugin;
@@ -25,6 +24,7 @@ import co.cask.cdap.api.plugin.PluginProperties;
 import co.cask.cdap.api.plugin.PluginPropertyField;
 import co.cask.cdap.api.plugin.PluginSelector;
 import co.cask.cdap.common.ArtifactNotFoundException;
+import co.cask.cdap.internal.app.runtime.artifact.ArtifactDescriptor;
 import co.cask.cdap.internal.app.runtime.artifact.ArtifactRepository;
 import co.cask.cdap.proto.Id;
 import co.cask.cdap.proto.id.NamespaceId;

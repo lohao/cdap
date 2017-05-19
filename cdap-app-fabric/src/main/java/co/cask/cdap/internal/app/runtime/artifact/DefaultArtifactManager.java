@@ -108,7 +108,7 @@ public class DefaultArtifactManager {
                                           RetryStrategy retryStrategy) throws IOException {
     HttpRequest.Builder requestBuilder =
       remoteClient.requestBuilder(HttpMethod.GET,
-                                  String.format("namespaces/%s/artifact-internals/list/artifacts",
+                                  String.format("namespaces/%s/artifact-internals/artifacts",
                                                 namespaceId.getEntityName()));
     // add header if auth is enabled
     if (authorizationEnabled) {

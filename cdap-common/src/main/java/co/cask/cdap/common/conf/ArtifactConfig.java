@@ -19,6 +19,7 @@ package co.cask.cdap.common.conf;
 import co.cask.cdap.api.artifact.ArtifactRange;
 import co.cask.cdap.api.plugin.PluginClass;
 import co.cask.cdap.proto.Id;
+import co.cask.cdap.proto.artifact.ArtifactRanges;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
@@ -101,7 +102,7 @@ public class ArtifactConfig  {
 
   /**
    * Serializer for ArtifactRange in a ArtifactConfig. Artifact ranges are expected to be able to be
-   * parsed via {@link co.cask.cdap.proto.artifact.ArtifactUtil#parseArtifactRange(String)}.
+   * parsed via {@link ArtifactRanges#parseArtifactRange(String)}.
    * Currently, system artifacts can only extend other system artifacts.
    */
   private static final class ArtifactRangeSerializer implements JsonSerializer<ArtifactRange> {
