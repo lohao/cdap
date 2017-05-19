@@ -23,6 +23,7 @@ import co.cask.cdap.app.runtime.spark.distributed.DistributedSparkProgramRunner;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.lang.ClassLoaders;
+import co.cask.cdap.common.lang.FilterClassLoader;
 import co.cask.cdap.proto.ProgramType;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -44,7 +45,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Type;
 import java.net.URL;
-import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -254,7 +256,9 @@ public abstract class SparkProgramRuntimeProvider implements ProgramRuntimeProvi
     if (classLoaderUrls == null) {
       classLoaderUrls = getSparkClassloaderURLs(getClass().getClassLoader());
     }
-    classLoader = new SparkRunnerClassLoader(classLoaderUrls, getClass().getClassLoader(), rewriteYarnClient);
+    // Scala classes should never comes from parent
+    classLoader = new SparkRunnerClassLoader(classLoaderUrls, new ScalaFilterClassLoader(getClass().getClassLoader()),
+                                             rewriteYarnClient);
 
     // CDAP-8087: Due to Scala 2.10 bug in not able to support runtime reflection from multiple threads,
     // we create the runtime mirror from this synchronized method
@@ -291,16 +295,58 @@ public abstract class SparkProgramRuntimeProvider implements ProgramRuntimeProvi
    * given {@link ClassLoader}.
    */
   private URL[] getSparkClassloaderURLs(ClassLoader classLoader) throws IOException {
-    List<URL> urls = ClassLoaders.getClassLoaderURLs(classLoader, new ArrayList<URL>());
+    List<URL> urls = ClassLoaders.getClassLoaderURLs(classLoader, new LinkedList<URL>());
 
     // If Spark classes are not available in the given ClassLoader, try to locate the Spark framework
     // This class cannot have dependency on Spark directly, hence using the class resource to discover if SparkContext
     // is there
     if (classLoader.getResource("org/apache/spark/SparkContext.class") == null) {
+      // The scala from the Spark library should replace the one from the parent classloader
+      Iterator<URL> itor = urls.iterator();
+      while (itor.hasNext()) {
+        URL url = itor.next();
+        if (url.getPath().contains("org.scala-lang")) {
+          itor.remove();
+        }
+      }
+
       for (File file : SparkPackageUtils.getLocalSparkLibrary(providerSparkCompat)) {
         urls.add(file.toURI().toURL());
       }
     }
     return urls.toArray(new URL[urls.size()]);
+  }
+
+  /**
+   * A ClassLoader that filter out scala class.
+   */
+  private static final class ScalaFilterClassLoader extends ClassLoader {
+
+    ScalaFilterClassLoader(ClassLoader parent) {
+      super(new FilterClassLoader(parent, new FilterClassLoader.Filter() {
+        @Override
+        public boolean acceptResource(String resource) {
+          return !resource.startsWith("scala/") && !"scala.class".equals(resource);
+        }
+
+        @Override
+        public boolean acceptPackage(String packageName) {
+          return !packageName.startsWith("scala/");
+        }
+      }));
+    }
+
+    @Override
+    public URL getResource(String name) {
+      URL resource = super.getResource(name);
+      if (resource == null) {
+        return null;
+      }
+      // resource = jar:file:/path/to/cdap/lib/org.scala-lang.scala-library-2.10.4.jar!/library.properties
+      // baseClasspath = /path/to/cdap/lib/org.scala-lang.scala-library-2.10.4.jar
+      String baseClasspath = ClassLoaders.getClassPathURL(name, resource).getPath();
+      String jarName = baseClasspath.substring(baseClasspath.lastIndexOf('/') + 1, baseClasspath.length());
+      return jarName.startsWith("org.scala-lang") ? null : resource;
+    }
   }
 }
