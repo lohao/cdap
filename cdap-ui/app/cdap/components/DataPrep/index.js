@@ -29,7 +29,6 @@ import ee from 'event-emitter';
 import NamespaceStore from 'services/NamespaceStore';
 import {setWorkspace, getWorkspaceList} from 'components/DataPrep/store/DataPrepActionCreator';
 import WorkspaceTabs from 'components/DataPrep/WorkspaceTabs';
-import {Link} from 'react-router-dom';
 import IconSVG from 'components/IconSVG';
 import classnames from 'classnames';
 import {checkDataPrepHigherVersion} from 'components/DataPrep/helper';
@@ -192,29 +191,16 @@ export default class DataPrep extends Component {
   }
 
   renderTogglePanel() {
-    if (this.props.singleWorkspaceMode) {
-      return (
-        <div className="panel-toggle float-xs-left text-xs-center">
-          <span className="panel-button">
-            <IconSVG
-              name="icon-chevron-left"
-            />
-          </span>
-        </div>
-      );
-    }
-    let namespace = NamespaceStore.getState().selectedNamespace;
-
     return (
-      <div className="panel-toggle float-xs-left text-xs-center">
-        <Link
-          to={`/ns/${namespace}/connections`}
-          className="panel-button"
-        >
+      <div
+        className="panel-toggle float-xs-left text-xs-center"
+        onClick={this.props.onConnectionsToggle}
+      >
+        <span className="panel-button">
           <IconSVG
             name="icon-chevron-left"
           />
-        </Link>
+        </span>
       </div>
     );
   }
@@ -266,5 +252,6 @@ export default class DataPrep extends Component {
 DataPrep.propTypes = {
   singleWorkspaceMode: PropTypes.bool,
   workspaceId: PropTypes.string,
-  onSubmit: PropTypes.func
+  onSubmit: PropTypes.func,
+  onConnectionsToggle: PropTypes.func.isRequired
 };

@@ -14,10 +14,10 @@
  * the License.
  */
 
-import React, { Component } from 'react';
+import React, { Component, PropTypes } from 'react';
 import IconSVG from 'components/IconSVG';
 import classnames from 'classnames';
-import {Route, NavLink, Redirect} from 'react-router-dom';
+import {Route, NavLink, Redirect, Switch} from 'react-router-dom';
 import FileBrowser from 'components/FileBrowser';
 import NamespaceStore from 'services/NamespaceStore';
 import T from 'i18n-react';
@@ -147,6 +147,34 @@ export default class DataPrepConnections extends Component {
     );
   }
 
+  renderRoutes() {
+    const BASEPATH = '/ns/:namespace/connections';
+    return (
+      <Switch>
+        <Route
+          path={`${BASEPATH}/browser`}
+          render={({match, location}) => {
+            return (
+              <FileBrowser
+                match={match}
+                location={location}
+                toggle={this.toggleSidePanel}
+              />
+            );
+          }}
+        />
+        <Route
+          path={`${BASEPATH}/upload`}
+          render={() => {
+            return (
+              <ConnectionsUpload toggle={this.toggleSidePanel} />
+            );
+          }}
+        />
+        <Route component={RouteToHDFS} />
+      </Switch>
+    );
+  }
   render() {
     if (this.state.backendChecking) {
       return (
@@ -165,8 +193,6 @@ export default class DataPrepConnections extends Component {
     }
 
 
-    const BASEPATH = '/ns/:namespace/connections';
-
     return (
       <div className="dataprep-connections-container">
         {this.renderPanel()}
@@ -174,28 +200,29 @@ export default class DataPrepConnections extends Component {
         <div className={classnames('connections-content', {
           'expanded': !this.state.sidePanelExpanded
         })}>
-          <Route path={`${BASEPATH}/browser`}
-            render={({match, location}) => {
-              return (
-                <FileBrowser
-                  match={match}
-                  location={location}
-                  toggle={this.toggleSidePanel}
-                />
-              );
-            }}
-          />
-          <Route path={`${BASEPATH}/upload`}
-            render={() => {
-              return (
-                <ConnectionsUpload toggle={this.toggleSidePanel} />
-              );
-            }}
-          />
+          {
+            this.props.enableRouting ?
+              this.renderRoutes()
+            :
+              <FileBrowser
+                match={this.props.match}
+                location={this.props.location}
+                toggle={this.toggleSidePanel}
+              />
+          }
         </div>
 
-        <Route exact path={`${BASEPATH}`} component={RouteToHDFS} />
       </div>
     );
   }
 }
+
+DataPrepConnections.defaultProps = {
+  enableRouting: true
+};
+
+DataPrepConnections.propTypes = {
+  enableRouting: PropTypes.bool,
+  match: PropTypes.object,
+  location: PropTypes.object
+};

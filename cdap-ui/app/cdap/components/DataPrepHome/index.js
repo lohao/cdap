@@ -24,7 +24,9 @@ import {Redirect} from 'react-router-dom';
 import sortBy from 'lodash/sortBy';
 import DataPrepServiceControl from 'components/DataPrep/DataPrepServiceControl';
 import LoadingSVG from 'components/LoadingSVG';
+import DataPrepConnections from 'components/DataPrepConnections';
 
+require('./DataPrepHome.scss');
 /**
  *  Routing container for DataPrep for React
  **/
@@ -37,12 +39,13 @@ export default class DataPrepHome extends Component {
       rerouteTo: null,
       error: null,
       backendDown: false,
-      backendCheck: true
+      backendCheck: true,
+      toggleConnectionsView: false
     };
 
     this.namespace = NamespaceStore.getState().selectedNamespace;
     this.onServiceStart = this.onServiceStart.bind(this);
-
+    this.toggleConnectionsView = this.toggleConnectionsView.bind(this);
     this.fetching = false;
   }
 
@@ -85,6 +88,12 @@ export default class DataPrepHome extends Component {
           error: err.message || err.response.message
         });
       });
+  }
+
+  toggleConnectionsView() {
+    this.setState({
+      toggleConnectionsView: !this.state.toggleConnectionsView
+    });
   }
 
   checkWorkspaceId(props) {
@@ -138,6 +147,26 @@ export default class DataPrepHome extends Component {
     this.checkWorkspaceId(this.props);
   }
 
+  renderContents() {
+    return (
+      <div className="dataprephome-wrapper">
+        {
+          this.state.toggleConnectionsView ?
+            <DataPrepConnections
+              enableRouting = {false}
+              {...this.props}
+            />
+          :
+            null
+        }
+        <DataPrep
+          workspaceId={this.props.match.params.workspaceId}
+          onConnectionsToggle={this.toggleConnectionsView}
+        />
+      </div>
+    );
+  }
+
   render() {
     if (this.state.backendCheck) {
       return (
@@ -172,9 +201,9 @@ export default class DataPrepHome extends Component {
         <Helmet
           title={T.translate('features.DataPrep.pageTitle')}
         />
-        <DataPrep
-          workspaceId={this.props.match.params.workspaceId}
-        />
+        {
+          this.renderContents()
+        }
       </div>
     );
   }
@@ -185,5 +214,7 @@ DataPrepHome.propTypes = {
     params: PropTypes.shape({
       workspaceId: PropTypes.string
     })
-  })
+  }),
+  location: PropTypes.object,
+  history: PropTypes.object
 };
