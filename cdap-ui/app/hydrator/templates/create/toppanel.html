@@ -116,7 +116,8 @@
     </div>
     <div class="btn"
          ng-if="HydratorPlusPlusTopPanelCtrl.state.artifact.name === HydratorPlusPlusTopPanelCtrl.GLOBALS.etlDataPipeline"
-         ng-click="!HydratorPlusPlusTopPanelCtrl.hasNodes"
+         ng-class="{'active': HydratorPlusPlusTopPanelCtrl.showScheduler}"
+         ng-click="!HydratorPlusPlusTopPanelCtrl.hasNodes || HydratorPlusPlusTopPanelCtrl.toggleScheduler()"
          uib-tooltip="Start building a pipeline before scheduling"
          tooltip-placement="bottom auto"
          tooltip-enable="!HydratorPlusPlusTopPanelCtrl.hasNodes"
@@ -192,10 +193,12 @@
 <div class="pipeline-settings-backdrop"
      ng-if="HydratorPlusPlusTopPanelCtrl.state.viewSettings ||
      HydratorPlusPlusTopPanelCtrl.viewLogs ||
-     HydratorPlusPlusTopPanelCtrl.showRunTimeArguments"
+     HydratorPlusPlusTopPanelCtrl.showRunTimeArguments ||
+     HydratorPlusPlusTopPanelCtrl.showScheduler"
      ng-click="HydratorPlusPlusTopPanelCtrl.state.viewSettings =
      HydratorPlusPlusTopPanelCtrl.viewLogs =
-     HydratorPlusPlusTopPanelCtrl.showRunTimeArguments = false">
+     HydratorPlusPlusTopPanelCtrl.showRunTimeArguments =
+     HydratorPlusPlusTopPanelCtrl.showScheduler = false">
 </div>
 <div class="pipeline-settings">
   <div
@@ -208,17 +211,24 @@
   </div>
 </div>
 <div class="pipeline-configurations" ng-if="HydratorPlusPlusTopPanelCtrl.showRunTimeArguments">
-  </my-pipeline-configurations> -->
-    <my-pipeline-configurations
-      runtime-arguments="HydratorPlusPlusTopPanelCtrl.runtimeArguments"
-      apply-runtime-arguments="HydratorPlusPlusTopPanelCtrl.applyRuntimeArguments()"
-      convert-runtime-args-to-macros="HydratorPlusPlusTopPanelCtrl.convertRuntimeArgsToMacros()"
-      resolved-macros="HydratorPlusPlusTopPanelCtrl.resolvedMacros"
-      run-pipeline="HydratorPlusPlusTopPanelCtrl.onPreviewStart()"
-      pipeline-name="{{HydratorPlusPlusTopPanelCtrl.state.metadata['name']}}"
-      on-close="HydratorPlusPlusTopPanelCtrl.showRunTimeArguments = false"
-      namespace-id="{{HydratorPlusPlusTopPanelCtrl.$state.params.namespace}}">
-    </my-pipeline-configurations>
+  <my-pipeline-configurations
+    runtime-arguments="HydratorPlusPlusTopPanelCtrl.runtimeArguments"
+    apply-runtime-arguments="HydratorPlusPlusTopPanelCtrl.applyRuntimeArguments()"
+    convert-runtime-args-to-macros="HydratorPlusPlusTopPanelCtrl.convertRuntimeArgsToMacros()"
+    resolved-macros="HydratorPlusPlusTopPanelCtrl.resolvedMacros"
+    run-pipeline="HydratorPlusPlusTopPanelCtrl.onPreviewStart()"
+    pipeline-name="{{HydratorPlusPlusTopPanelCtrl.state.metadata['name']}}"
+    on-close="HydratorPlusPlusTopPanelCtrl.showRunTimeArguments = false"
+    namespace-id="{{HydratorPlusPlusTopPanelCtrl.$state.params.namespace}}">
+  </my-pipeline-configurations>
+</div>
+<div class="pipeline-scheduler" ng-if="HydratorPlusPlusTopPanelCtrl.showScheduler">
+  <my-pipeline-scheduler
+    store="HydratorPlusPlusTopPanelCtrl.HydratorPlusPlusConfigStore"
+    action-creator="HydratorPlusPlusTopPanelCtrl.HydratorPlusPlusConfigActions"
+    pipeline-name="{{HydratorPlusPlusTopPanelCtrl.state.metadata['name']}}"
+    on-close="HydratorPlusPlusTopPanelCtrl.showScheduler = false">
+  </my-pipeline-scheduler>
 </div>
 <div class="pipeline-settings pipeline-logs-section" ng-if="HydratorPlusPlusTopPanelCtrl.viewLogs">
   <my-log-viewer-preview

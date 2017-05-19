@@ -43,6 +43,7 @@ class HydratorPlusPlusTopPanelCtrl {
     this.currentPreviewId = null;
     this.$window = $window;
     this.showRunTimeArguments = false;
+    this.showScheduler = false;
     this.viewLogs = false;
     this.$q = $q;
     this.NonStorePipelineErrorFactory = NonStorePipelineErrorFactory;
@@ -448,6 +449,10 @@ class HydratorPlusPlusTopPanelCtrl {
     } else {
       this.stopPreview();
     }
+  }
+
+  toggleScheduler() {
+    this.showScheduler = !this.showScheduler;
   }
 
   applyRuntimeArguments() {

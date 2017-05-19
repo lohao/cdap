@@ -223,8 +223,8 @@
   </div>
   <cask-resource-center-button></cask-resource-center-button>
   <div class="pipeline-settings-backdrop"
-       ng-if="TopPanelCtrl.viewSettings || TopPanelCtrl.viewSummary || TopPanelCtrl.viewLogs || TopPanelCtrl.runPlayer.view"
-       ng-click="TopPanelCtrl.viewSettings = false; TopPanelCtrl.viewSummary = false; TopPanelCtrl.runPlayer.view = false; TopPanelCtrl.viewLogs = false; TopPanelCtrl.runPlayer.action = null">
+       ng-if="TopPanelCtrl.viewSettings || TopPanelCtrl.viewSummary || TopPanelCtrl.viewLogs || TopPanelCtrl.runPlayer.view || TopPanelCtrl.viewScheduler"
+       ng-click="TopPanelCtrl.viewSettings = false; TopPanelCtrl.viewSummary = false; TopPanelCtrl.runPlayer.view = false; TopPanelCtrl.viewLogs = false; TopPanelCtrl.viewScheduler = false; TopPanelCtrl.runPlayer.action = null">
   </div>
   <div class="pipeline-settings">
     <div
@@ -235,6 +235,16 @@
       template-type="{{TopPanelCtrl.config.artifact.name}}"
       my-pipeline-settings>
     </div>
+  </div>
+  <div class="pipeline-scheduler" ng-if="TopPanelCtrl.viewScheduler">
+    <my-pipeline-scheduler
+      store="TopPanelCtrl.HydratorPlusPlusDetailNonRunsStore"
+      action-creator="TopPanelCtrl.HydratorPlusPlusDetailActions"
+      pipeline-name="{{TopPanelCtrl.app.name}}"
+      on-close="TopPanelCtrl.viewScheduler = false"
+      is-disabled="true"
+      start-schedule="TopPanelCtrl.schedulePipeline()">
+    </my-pipeline-scheduler>
   </div>
   <div class="pipeline-configurations" ng-if="TopPanelCtrl.runPlayer.view">
     <my-pipeline-configurations

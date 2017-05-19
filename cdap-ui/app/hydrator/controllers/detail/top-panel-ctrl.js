@@ -77,6 +77,7 @@ class HydratorDetailTopPanelController {
     };
     this.viewSettings = false;
     this.viewLogs = false;
+    this.viewScheduler = false;
     this.pipelineType = HydratorPlusPlusDetailNonRunsStore.getPipelineType();
     this.tooltipDescription = (this.app.description && this.app.description.replace(/\n/g, '<br />')) || '' ;
     this.setState();
@@ -335,7 +336,7 @@ class HydratorDetailTopPanelController {
       case 'Schedule':
         this.getRuntimeArguments()
           .then(() => {
-            this.runPlayer.view = true;
+            this.viewScheduler = true;
             this.runPlayer.action = this.MyPipelineStatusMapper.lookupDisplayStatus('SCHEDULING');
           });
         break;
@@ -466,7 +467,7 @@ class HydratorDetailTopPanelController {
       )
       .then(
         () => {
-          this.runPlayer.view = false;
+          this.viewScheduler = false;
           this.runPlayer.action = null;
         }
       );

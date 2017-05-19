@@ -172,6 +172,12 @@ angular.module(PKG.name+'.services')
 
   /* ----------------------------------------------------------------------- */
 
+  function isNumeric(n) {
+    return !isNaN(parseFloat(n)) && isFinite(n);
+  }
+
+  /* ----------------------------------------------------------------------- */
+
   return {
     deepSet: deepSet,
     objectSetter: objectSetter,
@@ -179,6 +185,7 @@ angular.module(PKG.name+'.services')
     objectQuery: objectQuery,
     getConfig: getConfig,
     getConfigNs: getConfigNs,
-    getAbsUIUrl: $window.getAbsUIUrl
+    getAbsUIUrl: $window.getAbsUIUrl,
+    isNumeric: isNumeric
   };
 });
